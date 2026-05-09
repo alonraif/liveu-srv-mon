@@ -211,7 +211,7 @@ def get_liveu_identity() -> dict:
 
 def _get_mmh_config(root: Path) -> dict:
     instances_py = root / 'instances.py'
-    mmh_instances = _extract_int_constant(instances_py, 'MMH_INSTANCES') or 0
+    mmh_instances = _extract_int_constant(instances_py, 'MMH_INSTANCES') or _extract_int_constant(instances_py, 'MH_INSTANCES') or 0
     listening_udp_ports = _read_host_udp_listening_ports()
     allowed_udp_ports = _read_host_udp_allowed_ports()
 
@@ -237,8 +237,16 @@ def _get_mmh_config(root: Path) -> dict:
         )
 
     overseer = root / 'overseer.py'
-    external_preview_tcp_port = _extract_int_constant(overseer, 'EXTERNAL_PREVIEW_TCP_PORT')
+    common = root / 'common.servercommon.py'
+    # External Preview TCP Port is stored in common.servercommon.py as EXTERNAL_FILESERVER_TCP_PORT
+    external_preview_tcp_port = _extract_int_constant(common, 'EXTERNAL_FILESERVER_TCP_PORT')
+    if external_preview_tcp_port is None:
+        external_preview_tcp_port = _extract_int_constant(overseer, 'EXTERNAL_PREVIEW_TCP_PORT')
+    if external_preview_tcp_port is None:
+        external_preview_tcp_port = _extract_int_constant(overseer, 'EXTERNAL_LOCAL_HUB_PORT')
     local_hub_port = _extract_int_constant(overseer, 'LOCAL_HUB_PORT')
+    if local_hub_port is None:
+        local_hub_port = _extract_int_constant(overseer, 'EXTERNAL_LOCAL_HUB_PORT')
 
     return {
         'mmh_instances': mmh_instances,

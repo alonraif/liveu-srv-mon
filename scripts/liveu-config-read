@@ -8,7 +8,7 @@ if [[ -z "${target}" ]]; then
 fi
 
 case "${target}" in
-  /host/etc/liveu/baseuniqueid|/host/etc/liveu/server-license.txt|/host/etc/liveu/instances.py|/host/etc/liveu/overseer.py)
+  /host/etc/liveu/baseuniqueid|/host/etc/liveu/server-license.txt|/host/etc/liveu/instances.py|/host/etc/liveu/overseer.py|/host/etc/liveu/common.servercommon.py)
     ;;
   /host/etc/liveu/instance[0-9]*/collector.py)
     ;;
