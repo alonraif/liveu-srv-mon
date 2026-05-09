@@ -255,7 +255,7 @@ export function App() {
   }, [liveuConfig]);
 
   const chartData = useMemo(() => {
-    if (!history) return [];
+    if (!history || !history.samples) return [];
     return history.samples
       .map((s) => {
         const ts = parseApiTimestampMs(s.timestamp);

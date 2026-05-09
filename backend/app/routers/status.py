@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -6,6 +8,8 @@ from ..deps import require_admin
 from ..schemas import StatusCurrentResponse, StatusHistoryResponse
 from ..services.metrics_service import get_history, get_latest_status
 from ..services.system_status import get_disk_usage_df, get_liveu_service_status, get_os_kernel, get_server_version
+
+logger = logging.getLogger('liveu-monitor')
 
 router = APIRouter(prefix='/api/status', tags=['status'])
 
@@ -32,8 +36,15 @@ def status_history(
     _ctx=Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    days = 7
-    if range_value.endswith('d') and range_value[:-1].isdigit():
-        days = max(1, min(30, int(range_value[:-1])))
-    samples = get_history(db, days=days)
-    return StatusHistoryResponse(samples=samples)
+    try:
+        days = 7
+        if range_value.endswith('d') and range_value[:-1].isdigit():
+            days = max(1, min(30, int(range_value[:-1])))
+        samples = get_history(db, days=days)
+        return StatusHistoryResponse(samples=samples)
+    except Exception as e:
+        logger.error(f"Error fetching status history: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch status history"
+        )

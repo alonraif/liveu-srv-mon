@@ -26,11 +26,20 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     credentials: 'include',
   });
 
-  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const message = data?.detail || `Request failed (${res.status})`;
+    let message = `Request failed (${res.status})`;
+    try {
+      const data = await res.json();
+      if (data?.detail) message = data.detail;
+    } catch {
+      // If response body can't be parsed, check for content length mismatch
+      if (res.status === 0 || res.headers.get('content-length') === null) {
+        message = `Server connection error: ${res.url}`;
+      }
+    }
     throw new Error(message);
   }
+  const data = await res.json();
   return data as T;
 }
 
