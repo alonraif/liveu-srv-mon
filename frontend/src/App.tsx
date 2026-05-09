@@ -4,7 +4,7 @@ import 'prismjs/components/prism-python';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { apiFetch } from './api';
-import { AuditEntry, AuthState, Identity, NetworkInfo, StatusCurrent, StatusHistory } from './types';
+import { AuditEntry, AuthState, Identity, NetworkInfo, SpeedtestResult, StatusCurrent, StatusHistory } from './types';
 
 type TabKey = 'overview' | 'liveu' | 'logs' | 'admin' | 'audit';
 type GraphWindowKey = '5m' | '10m' | '30m' | '1h' | '24h' | '7d';
@@ -28,10 +28,11 @@ const GRAPH_WINDOW_OPTIONS: Array<{ value: GraphWindowKey; label: string }> = [
   { value: '7d', label: '7 days' },
 ];
 const POLL_STATUS_MS = 5000;
-const POLL_HISTORY_MS = 15000;
+const POLL_HISTORY_MS = 1000;
 const POLL_NETWORK_MS = 10000;
 const POLL_LIVEU_MS = 5 * 60 * 1000;
 const POLL_AUDIT_MS = 15000;
+const SPEEDTEST_PHASES = ['Initializing', 'Selecting server', 'Testing download', 'Testing upload', 'Finalizing'];
 
 function parseApiTimestampMs(value: string): number {
   // Backend often emits UTC timestamps without timezone suffix.
@@ -81,6 +82,10 @@ export function App() {
   const [restartError, setRestartError] = useState<string | null>(null);
   const [rebootMessage, setRebootMessage] = useState<string | null>(null);
   const [rebootError, setRebootError] = useState<string | null>(null);
+  const [speedtestBusy, setSpeedtestBusy] = useState(false);
+  const [speedtestPhaseIdx, setSpeedtestPhaseIdx] = useState(0);
+  const [speedtestResult, setSpeedtestResult] = useState<SpeedtestResult | null>(null);
+  const [speedtestError, setSpeedtestError] = useState<string | null>(null);
   const [restartPassword, setRestartPassword] = useState('');
   const [rebootPassword, setRebootPassword] = useState('');
   const [rebootConfirm, setRebootConfirm] = useState('');
@@ -406,6 +411,32 @@ export function App() {
       setRebootMessage(res.detail);
     } catch (err: any) {
       setRebootError(err.message || 'Failed to reboot server');
+    }
+  }
+
+  async function onRunSpeedtest(e: FormEvent) {
+    e.preventDefault();
+    if (speedtestBusy) return;
+    setSpeedtestBusy(true);
+    setSpeedtestPhaseIdx(0);
+    setSpeedtestError(null);
+    setSpeedtestResult(null);
+
+    const phaseTimer = window.setInterval(() => {
+      setSpeedtestPhaseIdx((prev) => Math.min(prev + 1, SPEEDTEST_PHASES.length - 1));
+    }, 3500);
+
+    try {
+      const res = await apiFetch<SpeedtestResult>('/api/admin/speedtest', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      setSpeedtestResult(res);
+    } catch (err: any) {
+      setSpeedtestError(err.message || 'Failed to run speed test');
+    } finally {
+      window.clearInterval(phaseTimer);
+      setSpeedtestBusy(false);
     }
   }
 
@@ -768,6 +799,30 @@ export function App() {
             <button className="danger">Reboot Server</button>
             {rebootMessage && <div className="info">{rebootMessage}</div>}
             {rebootError && <div className="error">{rebootError}</div>}
+          </form>
+
+          <form className="panel form" onSubmit={onRunSpeedtest}>
+            <h3>Network Speed Test</h3>
+            <button className="inline-spinner-btn" disabled={speedtestBusy}>
+              {speedtestBusy && <span className="button-spinner" aria-hidden="true" />}
+              {speedtestBusy ? `${SPEEDTEST_PHASES[speedtestPhaseIdx]}...` : 'Start Speed Test'}
+            </button>
+            {speedtestError && <div className="error">{speedtestError}</div>}
+            {speedtestResult && (
+              <div className="speedtest-result">
+                <div><strong>Download:</strong> {speedtestResult.download_mbps.toFixed(2)} Mbps</div>
+                <div><strong>Upload:</strong> {speedtestResult.upload_mbps.toFixed(2)} Mbps</div>
+                <div><strong>Ping:</strong> {speedtestResult.ping_ms.toFixed(2)} ms</div>
+                <div><strong>Server:</strong> {speedtestResult.server_name} ({speedtestResult.server_sponsor})</div>
+                <div><strong>Location:</strong> {speedtestResult.server_country}</div>
+                <div><strong>Host:</strong> {speedtestResult.server_host}</div>
+                <div><strong>Public IP:</strong> {speedtestResult.public_ip}</div>
+                <div>
+                  <strong>Timestamp:</strong>{' '}
+                  {speedtestResult.timestamp ? new Date(speedtestResult.timestamp).toLocaleString() : '-'}
+                </div>
+              </div>
+            )}
           </form>
         </section>
       )}

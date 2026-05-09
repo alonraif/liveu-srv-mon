@@ -28,6 +28,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         openssl \
         sudo \
         lm-sensors \
+        speedtest-cli \
         systemd \
         ca-certificates && \
     python3 -m venv "$VIRTUAL_ENV" && \

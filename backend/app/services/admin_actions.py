@@ -1,3 +1,4 @@
+import json
 import subprocess
 import time
 
@@ -110,3 +111,55 @@ def restart_liveu_service() -> str:
 
 def reboot_server() -> str:
     return _run_action('reboot')
+
+
+def run_speedtest() -> dict:
+    try:
+        result = subprocess.run(
+            ['speedtest-cli', '--json'],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+    except OSError as exc:
+        raise AdminActionError(f'Speedtest command failed to start: {exc}') from exc
+    except subprocess.SubprocessError as exc:
+        raise AdminActionError(f'Speedtest command failed: {exc}') from exc
+
+    output = (result.stdout or '').strip()
+    stderr = (result.stderr or '').strip()
+    if result.returncode != 0:
+        raise AdminActionError(stderr or output or f'Speedtest failed with exit code {result.returncode}')
+    if not output:
+        raise AdminActionError('Speedtest returned empty output')
+
+    try:
+        payload = json.loads(output)
+    except json.JSONDecodeError as exc:
+        raise AdminActionError(f'Speedtest returned invalid JSON: {exc}') from exc
+
+    server = payload.get('server') or {}
+    client = payload.get('client') or {}
+
+    def _to_float(value, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    download_mbps = round(_to_float(payload.get('download')) / 1_000_000, 2)
+    upload_mbps = round(_to_float(payload.get('upload')) / 1_000_000, 2)
+    ping_ms = round(_to_float(payload.get('ping')), 2)
+
+    return {
+        'timestamp': str(payload.get('timestamp') or ''),
+        'download_mbps': download_mbps,
+        'upload_mbps': upload_mbps,
+        'ping_ms': ping_ms,
+        'server_name': str(server.get('name') or 'Unknown'),
+        'server_sponsor': str(server.get('sponsor') or 'Unknown'),
+        'server_country': str(server.get('country') or 'Unknown'),
+        'server_host': str(server.get('host') or 'Unknown'),
+        'public_ip': str(client.get('ip') or 'Unknown'),
+    }

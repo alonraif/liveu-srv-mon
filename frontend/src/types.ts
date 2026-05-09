@@ -52,3 +52,15 @@ export type AuditEntry = {
   details: string;
   remote_ip: string | null;
 };
+
+export type SpeedtestResult = {
+  timestamp: string;
+  download_mbps: number;
+  upload_mbps: number;
+  ping_ms: number;
+  server_name: string;
+  server_sponsor: string;
+  server_country: string;
+  server_host: string;
+  public_ip: string;
+};

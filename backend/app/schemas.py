@@ -63,5 +63,17 @@ class RebootRequest(BaseModel):
     confirmation: str
 
 
+class SpeedtestResultResponse(BaseModel):
+    timestamp: str
+    download_mbps: float
+    upload_mbps: float
+    ping_ms: float
+    server_name: str
+    server_sponsor: str
+    server_country: str
+    server_host: str
+    public_ip: str
+
+
 class ApiError(BaseModel):
     detail: str
