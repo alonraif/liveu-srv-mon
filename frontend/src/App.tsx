@@ -92,6 +92,7 @@ export function App() {
   const [rebootPassword, setRebootPassword] = useState('');
   const [rebootConfirm, setRebootConfirm] = useState('');
   const [graphWindow, setGraphWindow] = useState<GraphWindowKey>('5m');
+  const [, forceUpdate] = useState(0);
 
   const ensureSession = useCallback(async () => {
     setAuthLoading(true);
@@ -254,6 +255,14 @@ export function App() {
     Prism.highlightAll();
   }, [liveuConfig]);
 
+  // Ticker to smoothly scroll the graph X-axis based on current time
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      forceUpdate((v) => v + 1);
+    }, 100);
+    return () => window.clearInterval(interval);
+  }, []);
+
   const chartData = useMemo(() => {
     if (!history || !history.samples) return [];
     return history.samples
@@ -279,6 +288,12 @@ export function App() {
     const cutoff = latestTs - GRAPH_WINDOW_MS[graphWindow];
     return chartData.filter((point) => point.ts >= cutoff);
   }, [chartData, graphWindow]);
+
+  const xAxisDomain = useMemo(() => {
+    const now = Date.now();
+    const windowMs = GRAPH_WINDOW_MS[graphWindow];
+    return [now - windowMs, now];
+  }, [graphWindow]);
 
   const liveuServiceStatus = status?.liveu_service_status || 'unknown';
   const graphNicName = status?.network_interface || windowedChartData[windowedChartData.length - 1]?.nic || 'N/A';
@@ -663,14 +678,14 @@ export function App() {
                       <XAxis
                         dataKey="ts"
                         type="number"
-                        domain={['dataMin', 'dataMax']}
+                        domain={xAxisDomain}
                         tickFormatter={formatGraphTick}
                         tick={{ fill: '#627d98', fontSize: 12 }}
                         minTickGap={24}
                       />
                       <YAxis domain={[0, 100]} tick={{ fill: '#627d98', fontSize: 12 }} width={38} />
                       <Tooltip labelFormatter={(value) => new Date(value).toLocaleString()} />
-                      <Line type="monotone" dataKey="cpu" stroke="#0ea5e9" dot={false} strokeWidth={2} name="CPU %" />
+                      <Line type="monotone" dataKey="cpu" stroke="#0ea5e9" dot={false} strokeWidth={2} name="CPU %" isAnimationActive={true} animationDuration={500} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -684,14 +699,14 @@ export function App() {
                       <XAxis
                         dataKey="ts"
                         type="number"
-                        domain={['dataMin', 'dataMax']}
+                        domain={xAxisDomain}
                         tickFormatter={formatGraphTick}
                         tick={{ fill: '#627d98', fontSize: 12 }}
                         minTickGap={24}
                       />
                       <YAxis domain={[0, 100]} tick={{ fill: '#627d98', fontSize: 12 }} width={38} />
                       <Tooltip labelFormatter={(value) => new Date(value).toLocaleString()} />
-                      <Line type="monotone" dataKey="memory" stroke="#10b981" dot={false} strokeWidth={2} name="Memory %" />
+                      <Line type="monotone" dataKey="memory" stroke="#10b981" dot={false} strokeWidth={2} name="Memory %" isAnimationActive={true} animationDuration={500} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -705,14 +720,14 @@ export function App() {
                       <XAxis
                         dataKey="ts"
                         type="number"
-                        domain={['dataMin', 'dataMax']}
+                        domain={xAxisDomain}
                         tickFormatter={formatGraphTick}
                         tick={{ fill: '#627d98', fontSize: 12 }}
                         minTickGap={24}
                       />
                       <YAxis tick={{ fill: '#627d98', fontSize: 12 }} width={38} />
                       <Tooltip labelFormatter={(value) => new Date(value).toLocaleString()} />
-                      <Line type="monotone" dataKey="temp" stroke="#f97316" dot={false} strokeWidth={2} name="Temp C" />
+                      <Line type="monotone" dataKey="temp" stroke="#f97316" dot={false} strokeWidth={2} name="Temp C" isAnimationActive={true} animationDuration={500} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -726,7 +741,7 @@ export function App() {
                       <XAxis
                         dataKey="ts"
                         type="number"
-                        domain={['dataMin', 'dataMax']}
+                        domain={xAxisDomain}
                         tickFormatter={formatGraphTick}
                         tick={{ fill: '#627d98', fontSize: 12 }}
                         minTickGap={24}
@@ -736,8 +751,8 @@ export function App() {
                         labelFormatter={(value) => new Date(value).toLocaleString()}
                         formatter={(value) => `${Number(value ?? 0).toFixed(3)} Mbps`}
                       />
-                      <Line type="monotone" dataKey="rxMbps" stroke="#2563eb" dot={false} strokeWidth={2} name="RX Mbps" />
-                      <Line type="monotone" dataKey="txMbps" stroke="#d97706" dot={false} strokeWidth={2} name="TX Mbps" />
+                      <Line type="monotone" dataKey="rxMbps" stroke="#2563eb" dot={false} strokeWidth={2} name="RX Mbps" isAnimationActive={true} animationDuration={500} />
+                      <Line type="monotone" dataKey="txMbps" stroke="#d97706" dot={false} strokeWidth={2} name="TX Mbps" isAnimationActive={true} animationDuration={500} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
