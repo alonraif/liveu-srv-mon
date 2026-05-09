@@ -93,21 +93,51 @@ After deployment, you can test the reboot functionality:
 1. **Via UI:**
    - Navigate to https://<SERVER_IP>:8443
    - Log in as admin
-   - Look for reboot button/option in the admin panel
-   - Click reboot and verify the host reboots
+   - Go to the "Admin Actions" tab
+   - In the "Reboot Server" section, enter your password and type "REBOOT" in the confirmation field
+   - Click the "Reboot Server" button
+   - The button will show a spinner and change text to "Rebooting..." then "Waiting for server to reboot..."
+   - The page will automatically poll every 5 seconds until the server comes back online
+   - Once the server is back, you'll see a success message and the dashboard will refresh
 
 2. **Via API (if available):**
    ```bash
    curl -k -X POST https://localhost:8443/api/admin/reboot \
-     -H "Cookie: liveu_session=<your_session_token>"
+     -H "Cookie: liveu_session=<your_session_token>" \
+     -H "Content-Type: application/json" \
+     -d '{"password":"your_password","confirmation":"REBOOT"}'
    ```
 
 ## Verification
 
 After the host reboots:
-1. Wait for the system to come back up (1-2 minutes)
-2. Verify the container auto-restarts: `docker compose ps`
-3. Check if the service is accessible: `curl -k https://localhost:8443/healthz`
+1. The UI will automatically detect when the server is back online (polling every 5 seconds)
+2. Once detected, you'll see "Server rebooted successfully and is back online." message
+3. The dashboard data will automatically refresh
+4. If the server doesn't come back within 5 minutes, a timeout error will be displayed
+
+## How It Works
+
+### Backend (Host Reboot)
+1. User clicks "Reboot" in the UI
+2. Backend calls `reboot_server()` → `_run_action('reboot')`
+3. `_run_action` executes `/usr/local/bin/liveu-admin-action reboot`
+4. Script runs: `sudo nsenter -t 1 -p -m -n -- /sbin/reboot`
+5. `nsenter` enters host's PID 1 namespace (requires privileged container)
+6. `/sbin/reboot` executes in host context
+7. Host reboots
+8. Container stops (as part of host shutdown)
+9. After host boots, Docker daemon starts
+10. Container auto-restarts (due to `restart: unless-stopped`)
+
+### Frontend (Polling & UI)
+1. User clicks "Reboot Server" button
+2. Button shows spinner and changes to "Rebooting..."
+3. After API call succeeds, button changes to "Waiting for server to reboot..."
+4. Frontend polls `/api/status/current` every 5 seconds
+5. When server responds, polling stops and success message is shown
+6. Dashboard data is refreshed automatically
+7. If no response after 5 minutes (60 polls), timeout error is shown
 
 ## How It Works
 

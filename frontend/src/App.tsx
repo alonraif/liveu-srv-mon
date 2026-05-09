@@ -80,6 +80,8 @@ export function App() {
   const [restartLiveuStatus, setRestartLiveuStatus] = useState<string | null>(null);
   const [restartMessage, setRestartMessage] = useState<string | null>(null);
   const [restartError, setRestartError] = useState<string | null>(null);
+  const [rebootBusy, setRebootBusy] = useState(false);
+  const [rebootWaiting, setRebootWaiting] = useState(false);
   const [rebootMessage, setRebootMessage] = useState<string | null>(null);
   const [rebootError, setRebootError] = useState<string | null>(null);
   const [speedtestBusy, setSpeedtestBusy] = useState(false);
@@ -403,8 +405,12 @@ export function App() {
 
   async function onReboot(e: FormEvent) {
     e.preventDefault();
+    if (rebootBusy || rebootWaiting) return;
+    setRebootBusy(true);
+    setRebootWaiting(false);
     setRebootMessage(null);
     setRebootError(null);
+
     try {
       const res = await apiFetch<{ detail: string }>('/api/admin/reboot', {
         method: 'POST',
@@ -412,8 +418,37 @@ export function App() {
       });
       setRebootPassword('');
       setRebootConfirm('');
-      setRebootMessage(res.detail);
+
+      // Start polling for server to come back
+      setRebootBusy(false);
+      setRebootWaiting(true);
+
+      const pollInterval = 5000; // 5 seconds
+      const maxPolls = 60; // 5 minutes max
+      let pollCount = 0;
+
+      const pollTimer = window.setInterval(async () => {
+        pollCount++;
+        if (pollCount > maxPolls) {
+          window.clearInterval(pollTimer);
+          setRebootWaiting(false);
+          setRebootError('Server did not come back online in time. Please check manually.');
+          return;
+        }
+
+        try {
+          await apiFetch('/api/status/current');
+          window.clearInterval(pollTimer);
+          setRebootWaiting(false);
+          setRebootMessage('Server rebooted successfully and is back online.');
+          // Refresh all data
+          await Promise.allSettled([loadStatusCurrent(), loadStatusHistory(), loadNetworkInfo()]);
+        } catch {
+          // Keep polling - server is still down
+        }
+      }, pollInterval);
     } catch (err: any) {
+      setRebootBusy(false);
       setRebootError(err.message || 'Failed to reboot server');
     }
   }
@@ -825,7 +860,17 @@ export function App() {
               Type REBOOT
               <input value={rebootConfirm} onChange={(e) => setRebootConfirm(e.target.value)} />
             </label>
-            <button className="danger">Reboot Server</button>
+            <button 
+              className={`danger${(rebootBusy || rebootWaiting) ? ' inline-spinner-btn' : ''}`} 
+              disabled={rebootBusy || rebootWaiting}
+            >
+              {(rebootBusy || rebootWaiting) && <span className="button-spinner" aria-hidden="true" />}
+              {rebootBusy
+                ? 'Rebooting...'
+                : rebootWaiting
+                  ? 'Waiting for server to reboot...'
+                  : 'Reboot Server'}
+            </button>
             {rebootMessage && <div className="info">{rebootMessage}</div>}
             {rebootError && <div className="error">{rebootError}</div>}
           </form>
