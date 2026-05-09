@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+frontend/node_modules/
+frontend/dist/
+backend/app/static/
+/app/data/
+data/

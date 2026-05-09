@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+target="${1:-}"
+if [[ -z "${target}" ]]; then
+  echo "Usage: liveu-config-read <absolute-path>" >&2
+  exit 2
+fi
+
+case "${target}" in
+  /host/etc/liveu/baseuniqueid|/host/etc/liveu/server-license.txt|/host/etc/liveu/instances.py|/host/etc/liveu/overseer.py)
+    ;;
+  /host/etc/liveu/instance[0-9]*/collector.py)
+    ;;
+  /host/etc/liveu/ingest.py|/host/etc/liveu/ingest.hotfolderexposure.py|/host/etc/liveu/ingest.transcoder.py)
+    ;;
+  /host-root/etc/iptables/rules.v4|/host-root/etc/iptables/rules.v6)
+    ;;
+  *)
+    echo "Path not allowed: ${target}" >&2
+    exit 3
+    ;;
+esac
+
+if [[ ! -f "${target}" ]]; then
+  exit 4
+fi
+
+exec /bin/cat "${target}"

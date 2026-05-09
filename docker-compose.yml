@@ -1,0 +1,32 @@
+services:
+  liveu-server-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: liveu-server-monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATA_DIR=/app/data
+    ports:
+      - "8443:8443"
+    volumes:
+      - /:/host-root:ro
+      - /etc/liveu:/host/etc/liveu:ro
+      - /opt/liveu:/opt/liveu:ro
+      - /logs:/host/logs:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /run/systemd:/run/systemd
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - /etc/os-release:/host/etc/os-release:ro
+      - liveu_monitor_data:/app/data
+    security_opt:
+      - apparmor=unconfined
+    read_only: false
+    tmpfs:
+      - /tmp
+
+volumes:
+  liveu_monitor_data:
