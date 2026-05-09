@@ -4,6 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: liveu-server-monitor
+    privileged: true
+    pid: host
     restart: unless-stopped
     env_file:
       - .env
