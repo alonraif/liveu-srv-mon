@@ -263,6 +263,9 @@ export function App() {
           cpu: s.cpu_percent,
           memory: s.memory_percent,
           temp: s.temperature_c,
+          rxMbps: s.rx_mbps,
+          txMbps: s.tx_mbps,
+          nic: s.network_interface,
         };
       })
       .filter((point) => Number.isFinite(point.ts));
@@ -276,6 +279,7 @@ export function App() {
   }, [chartData, graphWindow]);
 
   const liveuServiceStatus = status?.liveu_service_status || 'unknown';
+  const graphNicName = status?.network_interface || windowedChartData[windowedChartData.length - 1]?.nic || 'N/A';
   const liveuServiceBadgeClass =
     liveuServiceStatus === 'active' ? 'badge-green' : liveuServiceStatus === 'unknown' ? 'badge-blue' : 'badge-red';
   const formatGraphTick = (ts: number) => {
@@ -674,6 +678,31 @@ export function App() {
                       <YAxis tick={{ fill: '#627d98', fontSize: 12 }} width={38} />
                       <Tooltip labelFormatter={(value) => new Date(value).toLocaleString()} />
                       <Line type="monotone" dataKey="temp" stroke="#f97316" dot={false} strokeWidth={2} name="Temp C" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="panel graph-card">
+                <h4>Network TX/RX ({graphNicName})</h4>
+                <div style={{ width: '100%', height: 220 }}>
+                  <ResponsiveContainer>
+                    <LineChart data={windowedChartData} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis
+                        dataKey="ts"
+                        type="number"
+                        domain={['dataMin', 'dataMax']}
+                        tickFormatter={formatGraphTick}
+                        tick={{ fill: '#627d98', fontSize: 12 }}
+                        minTickGap={24}
+                      />
+                      <YAxis tick={{ fill: '#627d98', fontSize: 12 }} width={44} />
+                      <Tooltip
+                        labelFormatter={(value) => new Date(value).toLocaleString()}
+                        formatter={(value) => `${Number(value ?? 0).toFixed(3)} Mbps`}
+                      />
+                      <Line type="monotone" dataKey="rxMbps" stroke="#2563eb" dot={false} strokeWidth={2} name="RX Mbps" />
+                      <Line type="monotone" dataKey="txMbps" stroke="#d97706" dot={false} strokeWidth={2} name="TX Mbps" />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

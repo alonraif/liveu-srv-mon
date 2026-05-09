@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .db import Base, SessionLocal, engine
+from .db import Base, SessionLocal, engine, ensure_schema_migrations
 from .routers import admin, audit, auth, liveu, logs, network, status as status_router
 from .services.auth_service import apply_admin_password_reset_if_requested, cleanup_expired_sessions, ensure_admin_user
 from .services.logs_service import cleanup_expired_log_bundles
@@ -16,12 +16,14 @@ from .services.metrics_service import MetricsCollector, collect_and_store_metric
 logger = logging.getLogger('liveu-monitor')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
 metrics_collector = MetricsCollector()
+settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings = get_settings()
     Base.metadata.create_all(bind=engine)
+    ensure_schema_migrations()
 
     with SessionLocal() as db:
         ensure_admin_user(db)
@@ -41,7 +43,14 @@ async def lifespan(_app: FastAPI):
         logger.info('Application stopped')
 
 
-app = FastAPI(title='LiveU Server Monitor', version='0.1.0', lifespan=lifespan)
+app = FastAPI(
+    title='LiveU Server Monitor',
+    version='0.1.0',
+    lifespan=lifespan,
+    docs_url='/docs' if settings.enable_api_docs else None,
+    redoc_url='/redoc' if settings.enable_api_docs else None,
+    openapi_url='/openapi.json' if settings.enable_api_docs else None,
+)
 
 
 @app.middleware('http')
@@ -50,7 +59,11 @@ async def set_security_headers(request: Request, call_next):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'same-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['Content-Security-Policy'] = "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self';"
+    if request.url.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-store'
     return response
 
 
@@ -76,7 +89,6 @@ app.include_router(logs.router)
 app.include_router(admin.router)
 app.include_router(audit.router)
 
-settings = get_settings()
 static_dir = Path(__file__).resolve().parent / 'static'
 assets_dir = static_dir / 'assets'
 if assets_dir.exists():

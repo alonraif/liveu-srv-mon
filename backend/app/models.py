@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -43,6 +43,11 @@ class MetricSample(Base):
     cpu_percent: Mapped[float] = mapped_column(Float)
     memory_percent: Mapped[float] = mapped_column(Float)
     temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    network_interface: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    rx_bytes_total: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    tx_bytes_total: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    rx_mbps: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tx_mbps: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
 class DiskSample(Base):

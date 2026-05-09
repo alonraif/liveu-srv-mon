@@ -25,6 +25,9 @@ class StatusCurrentResponse(BaseModel):
     cpu_percent: float
     memory_percent: float
     temperature_c: float | None
+    network_interface: str | None
+    rx_mbps: float | None
+    tx_mbps: float | None
     liveu_service_status: str
     disks: list[dict[str, Any]]
     os_version: str

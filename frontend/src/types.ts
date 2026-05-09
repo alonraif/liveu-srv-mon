@@ -9,6 +9,9 @@ export type StatusCurrent = {
   cpu_percent: number;
   memory_percent: number;
   temperature_c: number | null;
+  network_interface: string | null;
+  rx_mbps: number | null;
+  tx_mbps: number | null;
   liveu_service_status: string;
   disks: Array<{
     filesystem: string;
@@ -29,6 +32,9 @@ export type StatusHistory = {
     cpu_percent: number;
     memory_percent: number;
     temperature_c: number | null;
+    network_interface: string | null;
+    rx_mbps: number | null;
+    tx_mbps: number | null;
   }>;
 };
 

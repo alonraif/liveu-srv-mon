@@ -23,8 +23,10 @@ class Settings(BaseSettings):
     default_admin_username: str = 'admin'
     default_admin_temp_password: str = 'ChangeMeNow!123'
     reset_admin_password: str | None = None
+    trust_x_forwarded_for: bool = False
+    enable_api_docs: bool = False
 
-    metrics_interval_seconds: int = 5
+    metrics_interval_seconds: int = 1
     metrics_retention_days: int = 7
 
     host_liveu_dir: Path = Field(default=Path('/host/etc/liveu'))

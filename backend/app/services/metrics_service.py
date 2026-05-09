@@ -8,7 +8,7 @@ from ..config import get_settings
 from ..db import SessionLocal
 from ..models import DiskSample, MetricSample
 from .logs_service import cleanup_expired_log_bundles
-from .system_status import get_cpu_memory_temperature, get_disk_usage
+from .system_status import get_cpu_memory_temperature, get_disk_usage, get_relevant_nic_counters
 
 
 class MetricsCollector:
@@ -48,13 +48,38 @@ class MetricsCollector:
 def collect_and_store_metrics() -> None:
     values = get_cpu_memory_temperature()
     disks = get_disk_usage()
+    nic = get_relevant_nic_counters()
 
     with SessionLocal() as db:
+        previous = db.query(MetricSample).order_by(MetricSample.timestamp.desc()).first()
+        rx_mbps: float | None = None
+        tx_mbps: float | None = None
+        if (
+            previous
+            and previous.network_interface
+            and previous.network_interface == nic.get('interface')
+            and isinstance(previous.rx_bytes_total, int)
+            and isinstance(previous.tx_bytes_total, int)
+            and isinstance(nic.get('rx_bytes_total'), int)
+            and isinstance(nic.get('tx_bytes_total'), int)
+        ):
+            delta_seconds = (values['timestamp'] - previous.timestamp).total_seconds()
+            if delta_seconds > 0:
+                delta_rx = max(0, nic['rx_bytes_total'] - previous.rx_bytes_total)
+                delta_tx = max(0, nic['tx_bytes_total'] - previous.tx_bytes_total)
+                rx_mbps = round((delta_rx * 8) / delta_seconds / 1_000_000, 3)
+                tx_mbps = round((delta_tx * 8) / delta_seconds / 1_000_000, 3)
+
         sample = MetricSample(
             timestamp=values['timestamp'],
             cpu_percent=values['cpu_percent'],
             memory_percent=values['memory_percent'],
             temperature_c=values['temperature_c'],
+            network_interface=nic.get('interface'),
+            rx_bytes_total=nic.get('rx_bytes_total'),
+            tx_bytes_total=nic.get('tx_bytes_total'),
+            rx_mbps=rx_mbps,
+            tx_mbps=tx_mbps,
         )
         db.add(sample)
         db.flush()
@@ -111,6 +136,9 @@ def get_latest_status(db: Session) -> dict:
         'cpu_percent': sample.cpu_percent,
         'memory_percent': sample.memory_percent,
         'temperature_c': sample.temperature_c,
+        'network_interface': sample.network_interface,
+        'rx_mbps': sample.rx_mbps,
+        'tx_mbps': sample.tx_mbps,
         'disks': [
             {
                 'mountpoint': d.mountpoint,
@@ -138,6 +166,9 @@ def get_history(db: Session, days: int = 7) -> list[dict]:
             'cpu_percent': s.cpu_percent,
             'memory_percent': s.memory_percent,
             'temperature_c': s.temperature_c,
+            'network_interface': s.network_interface,
+            'rx_mbps': s.rx_mbps,
+            'tx_mbps': s.tx_mbps,
         }
         for s in samples
     ]

@@ -17,8 +17,9 @@ class AuthContext:
 
 
 def get_client_ip(request: Request) -> str:
+    settings = get_settings()
     forwarded = request.headers.get('x-forwarded-for')
-    if forwarded:
+    if settings.trust_x_forwarded_for and forwarded:
         return forwarded.split(',')[0].strip()
     if request.client and request.client.host:
         return request.client.host

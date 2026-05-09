@@ -446,12 +446,84 @@ def _is_tcp_port_open(host: str, port: int, timeout_seconds: float = 0.5) -> boo
         sock.close()
 
 
+def _read_default_interface(route_path: Path) -> str | None:
+    try:
+        route_lines = route_path.read_text(encoding='utf-8', errors='ignore').splitlines()
+    except OSError:
+        return None
+
+    for line in route_lines[1:]:
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        iface, destination_hex = parts[0], parts[1]
+        if destination_hex == '00000000' and iface != 'lo':
+            return iface
+    return None
+
+
+def _read_host_nic_counters_from_proc(iface: str) -> tuple[int, int] | None:
+    settings = get_settings()
+    net_dev_path = settings.host_proc_dir / '1' / 'net' / 'dev'
+    try:
+        lines = net_dev_path.read_text(encoding='utf-8', errors='ignore').splitlines()
+    except OSError:
+        return None
+
+    prefix = f'{iface}:'
+    for raw_line in lines[2:]:
+        line = raw_line.strip()
+        if not line.startswith(prefix):
+            continue
+        payload = line[len(prefix):].strip().split()
+        if len(payload) < 16:
+            return None
+        try:
+            rx_bytes = int(payload[0])
+            tx_bytes = int(payload[8])
+        except ValueError:
+            return None
+        return rx_bytes, tx_bytes
+    return None
+
+
+def get_relevant_nic_counters() -> dict:
+    settings = get_settings()
+    route_path = settings.host_proc_dir / '1' / 'net' / 'route'
+    default_iface = _read_default_interface(route_path)
+
+    if default_iface:
+        counters = _read_host_nic_counters_from_proc(default_iface)
+        if counters:
+            return {
+                'interface': default_iface,
+                'rx_bytes_total': counters[0],
+                'tx_bytes_total': counters[1],
+            }
+
+    pernic = psutil.net_io_counters(pernic=True)
+    stats = psutil.net_if_stats()
+    for iface, io in pernic.items():
+        if iface.startswith('lo'):
+            continue
+        st = stats.get(iface)
+        if st and not st.isup:
+            continue
+        return {
+            'interface': iface,
+            'rx_bytes_total': int(io.bytes_recv),
+            'tx_bytes_total': int(io.bytes_sent),
+        }
+
+    return {'interface': None, 'rx_bytes_total': None, 'tx_bytes_total': None}
+
+
 def _read_host_internal_ip() -> tuple[str | None, str]:
     settings = get_settings()
     route_path = settings.host_proc_dir / '1' / 'net' / 'route'
     fib_path = settings.host_proc_dir / '1' / 'net' / 'fib_trie'
 
-    default_iface: str | None = None
+    default_iface = _read_default_interface(route_path)
     default_network: ipaddress.IPv4Network | None = None
     link_status = 'down'
 
@@ -465,9 +537,6 @@ def _read_host_internal_ip() -> tuple[str | None, str]:
         if len(parts) < 8:
             continue
         iface, destination_hex, mask_hex = parts[0], parts[1], parts[7]
-        if destination_hex == '00000000' and iface != 'lo' and default_iface is None:
-            default_iface = iface
-
         if default_iface and iface == default_iface and destination_hex != '00000000':
             destination = _decode_route_ipv4_le(destination_hex)
             mask = _decode_route_ipv4_le(mask_hex)
