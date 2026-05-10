@@ -18,9 +18,10 @@ ALLOWED_UID = int(os.environ.get("LIVEU_HELPER_ALLOWED_UID", "10001"))
 ALLOWED_GID = int(os.environ.get("LIVEU_HELPER_ALLOWED_GID", str(SOCKET_GID)))
 SHARED_TOKEN = os.environ.get("LIVEU_HELPER_SHARED_TOKEN", "").strip()
 ALLOWED_ACTIONS = {
-    "restart-liveu": ["/usr/bin/systemctl", "restart", "liveu"],
+    "restart-liveu": ["/usr/bin/systemctl", "restart", "--no-block", "liveu"],
     "reboot": ["/sbin/reboot"],
     "liveu-config-show": ["/bin/bash", "-lc", "liveu-config --show"],
+    "liveu-status": ["/usr/bin/systemctl", "show", "--property", "ActiveState", "--value", "liveu"],
 }
 
 

@@ -8,7 +8,7 @@ from ..deps import get_client_ip, require_admin, validate_csrf
 from ..config import get_settings
 from ..schemas import AdminPasswordConfirm, RebootRequest, SpeedtestRequest, SpeedtestResultResponse
 from ..security import verify_password
-from ..services.admin_actions import AdminActionError, reboot_server, restart_liveu_service, run_speedtest
+from ..services.admin_actions import AdminActionError, get_liveu_status_via_runner, reboot_server, restart_liveu_service, run_speedtest
 from ..services.audit import write_audit
 from ..services.rate_limiter import SlidingWindowRateLimiter
 
@@ -153,3 +153,20 @@ def speedtest(
         remote_ip=client_ip,
     )
     return SpeedtestResultResponse(**result)
+
+
+@router.get('/liveu-status')
+def liveu_status(
+    request: Request,
+    ctx=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    status_value = get_liveu_status_via_runner()
+    write_audit(
+        db,
+        username=ctx.user.username,
+        action='liveu_status_check',
+        details=f'Queried host liveu status: {status_value}',
+        remote_ip=get_client_ip(request),
+    )
+    return {'status': status_value}

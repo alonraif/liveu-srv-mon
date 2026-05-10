@@ -426,19 +426,19 @@ export function App() {
     setRestartMessage(null);
     setRestartError(null);
 
-    const pollLiveuStatus = async () => {
+    const pollLiveuStatus = async (): Promise<string> => {
       try {
-        const current = await apiFetch<StatusCurrent>('/api/status/current');
-        setRestartLiveuStatus(current.liveu_service_status || 'unknown');
+        const current = await apiFetch<{ status: string }>('/api/admin/liveu-status');
+        const statusValue = current.status || 'unknown';
+        setRestartLiveuStatus(statusValue);
+        return statusValue;
       } catch {
         // Keep polling loop alive even if one request fails.
+        return 'unknown';
       }
     };
 
     void pollLiveuStatus();
-    const pollTimer = window.setInterval(() => {
-      void pollLiveuStatus();
-    }, 1000);
 
     try {
       const res = await apiFetch<{ detail: string }>('/api/admin/restart-liveu', {
@@ -446,7 +446,24 @@ export function App() {
         body: JSON.stringify({ password }),
       });
       setRestartMessage(res.detail);
-      void pollLiveuStatus();
+
+      const maxPolls = 120;
+      for (let i = 0; i < maxPolls; i++) {
+        const current = await pollLiveuStatus();
+        if (current === 'active') {
+          setRestartMessage('LiveU service restarted successfully (active).');
+          setRestartError(null);
+          break;
+        }
+        if (current === 'failed') {
+          setRestartError('LiveU service entered failed state after restart.');
+          break;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        if (i === maxPolls - 1) {
+          setRestartError(`Restart status check timed out. Current host state: ${current}`);
+        }
+      }
       void Promise.allSettled([loadStatusCurrent(), loadStatusHistory(), loadNetworkInfo()]);
     } catch (err: any) {
       const msg = err?.message || 'Failed to restart service';
@@ -454,9 +471,7 @@ export function App() {
       if (String(msg).toLowerCase().includes('password confirmation failed')) {
         throw err;
       }
-      void pollLiveuStatus();
     } finally {
-      window.clearInterval(pollTimer);
       setRestartBusy(false);
     }
   }

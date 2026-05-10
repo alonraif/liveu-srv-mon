@@ -90,25 +90,27 @@ def _run_action(action: str, timeout_seconds: int = 20) -> str:
 
 
 def restart_liveu_service() -> str:
-    try:
-        output = _run_action('restart-liveu', timeout_seconds=120)
-    except AdminActionError as exc:
-        message = str(exc).lower()
-        if 'timed out' not in message:
-            raise
-        status = _wait_for_liveu_status(max_wait_seconds=60)
-        if status in {'active', 'unknown'}:
-            return f'Restart timed out, but host reports liveu status: {status}'
-        raise AdminActionError(f'Restart timed out and host reports liveu status: {status}') from exc
-
-    status = _wait_for_liveu_status(max_wait_seconds=60)
+    output = _run_action('restart-liveu', timeout_seconds=20)
     if output == 'OK':
-        return f'Host reports liveu status: {status}'
-    return f'{output}; host reports liveu status: {status}'
+        return 'Restart command accepted'
+    return output
 
 
 def reboot_server() -> str:
     return _run_action('reboot')
+
+
+def get_liveu_status_via_runner() -> str:
+    try:
+        output = _run_action('liveu-status', timeout_seconds=10).strip().lower()
+    except AdminActionError:
+        return 'unknown'
+    if output in {'active', 'inactive', 'failed', 'activating', 'deactivating', 'reloading'}:
+        return output
+    parsed = _parse_systemctl_active_state(output)
+    if parsed:
+        return parsed
+    return 'unknown'
 
 
 def run_speedtest() -> dict:
