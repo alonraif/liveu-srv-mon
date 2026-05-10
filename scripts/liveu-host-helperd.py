@@ -15,6 +15,8 @@ SOCKET_PATH = Path("/run/liveu-helper/liveu-helper.sock")
 SOCKET_DIR = SOCKET_PATH.parent
 SOCKET_GID = int(os.environ.get("LIVEU_HELPER_SOCKET_GID", "10001"))
 ALLOWED_UID = int(os.environ.get("LIVEU_HELPER_ALLOWED_UID", "10001"))
+ALLOWED_GID = int(os.environ.get("LIVEU_HELPER_ALLOWED_GID", str(SOCKET_GID)))
+SHARED_TOKEN = os.environ.get("LIVEU_HELPER_SHARED_TOKEN", "").strip()
 ALLOWED_ACTIONS = {
     "restart-liveu": ["/usr/bin/systemctl", "restart", "liveu"],
     "reboot": ["/sbin/reboot"],
@@ -63,7 +65,7 @@ def _serve() -> int:
                 # Restrict callers to the container app user by UID.
                 raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
                 _pid, uid, gid = struct.unpack("3i", raw)
-                if uid != ALLOWED_UID:
+                if uid != ALLOWED_UID or gid != ALLOWED_GID:
                     logger.warning("Rejected helper request from uid=%s gid=%s", uid, gid)
                     response = {"ok": False, "error": "forbidden peer credentials"}
                     conn.sendall((json.dumps(response) + "\n").encode("utf-8"))
@@ -80,6 +82,13 @@ def _serve() -> int:
                     response = {"ok": False, "error": "invalid json"}
                 else:
                     action = str(payload.get("action") or "")
+                    if SHARED_TOKEN:
+                        token = str(payload.get("token") or "")
+                        if token != SHARED_TOKEN:
+                            logger.warning("Rejected helper request with invalid shared token")
+                            response = {"ok": False, "error": "invalid shared token"}
+                            conn.sendall((json.dumps(response) + "\n").encode("utf-8"))
+                            continue
                     ok, output = _handle_action(action)
                     response = {"ok": ok}
                     if ok:

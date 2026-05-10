@@ -391,7 +391,8 @@ td {
 }
 
 .admin-action-card {
-  min-height: 260px;
+  display: flex;
+  flex-direction: column;
 }
 
 .admin-action-card h3 {
@@ -404,7 +405,11 @@ td {
 }
 
 .admin-action-btn {
-  margin-top: auto;
+  margin-top: 0;
+}
+
+.admin-grid {
+  align-items: start;
 }
 
 @media (max-width: 980px) {

@@ -56,7 +56,7 @@ def _wait_for_liveu_status(max_wait_seconds: int = 20) -> str:
     last = 'unknown'
     while time.monotonic() < deadline:
         last = get_liveu_service_status_from_host()
-        if last in {'active', 'inactive', 'failed', 'unknown'}:
+        if last in {'active', 'inactive', 'failed'}:
             return last
         time.sleep(1)
     return last
@@ -91,17 +91,17 @@ def _run_action(action: str, timeout_seconds: int = 20) -> str:
 
 def restart_liveu_service() -> str:
     try:
-        output = _run_action('restart-liveu', timeout_seconds=60)
+        output = _run_action('restart-liveu', timeout_seconds=120)
     except AdminActionError as exc:
         message = str(exc).lower()
         if 'timed out' not in message:
             raise
-        status = _wait_for_liveu_status(max_wait_seconds=20)
-        if status == 'active':
+        status = _wait_for_liveu_status(max_wait_seconds=60)
+        if status in {'active', 'unknown'}:
             return f'Restart timed out, but host reports liveu status: {status}'
         raise AdminActionError(f'Restart timed out and host reports liveu status: {status}') from exc
 
-    status = _wait_for_liveu_status(max_wait_seconds=20)
+    status = _wait_for_liveu_status(max_wait_seconds=60)
     if output == 'OK':
         return f'Host reports liveu status: {status}'
     return f'{output}; host reports liveu status: {status}'

@@ -20,11 +20,15 @@ socket_path="${LIVEU_HELPER_SOCKET_PATH:-/run/liveu-helper/liveu-helper.sock}"
 
 python3 - "$socket_path" "$action" <<'PY'
 import json
+import os
 import socket
 import sys
 
 sock_path, action = sys.argv[1], sys.argv[2]
 request = {"action": action}
+shared_token = os.environ.get("LIVEU_HELPER_SHARED_TOKEN", "").strip()
+if shared_token:
+    request["token"] = shared_token
 
 try:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:

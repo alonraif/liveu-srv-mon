@@ -435,7 +435,7 @@ export function App() {
       }
     };
 
-    await pollLiveuStatus();
+    void pollLiveuStatus();
     const pollTimer = window.setInterval(() => {
       void pollLiveuStatus();
     }, 1000);
@@ -446,15 +446,15 @@ export function App() {
         body: JSON.stringify({ password }),
       });
       setRestartMessage(res.detail);
-      await pollLiveuStatus();
-      await Promise.allSettled([loadStatusCurrent(), loadStatusHistory(), loadNetworkInfo()]);
+      void pollLiveuStatus();
+      void Promise.allSettled([loadStatusCurrent(), loadStatusHistory(), loadNetworkInfo()]);
     } catch (err: any) {
       const msg = err?.message || 'Failed to restart service';
       setRestartError(msg);
       if (String(msg).toLowerCase().includes('password confirmation failed')) {
         throw err;
       }
-      await pollLiveuStatus();
+      void pollLiveuStatus();
     } finally {
       window.clearInterval(pollTimer);
       setRestartBusy(false);
@@ -570,19 +570,23 @@ export function App() {
     }
 
     setPromptBusy(true);
+    const chosenAction = actionPrompt;
+    const password = promptPassword;
+    const rebootConfirm = promptRebootConfirm;
+    setActionPrompt(null);
+    setPromptPassword('');
+    setPromptRebootConfirm('');
+    setPromptError(null);
     try {
-      if (actionPrompt === 'restart') {
-        await doRestartLiveu(promptPassword);
-      } else if (actionPrompt === 'reboot') {
-        await doReboot(promptPassword, promptRebootConfirm);
-      } else if (actionPrompt === 'speedtest') {
-        await doRunSpeedtest(promptPassword);
+      if (chosenAction === 'restart') {
+        await doRestartLiveu(password);
+      } else if (chosenAction === 'reboot') {
+        await doReboot(password, rebootConfirm);
+      } else if (chosenAction === 'speedtest') {
+        await doRunSpeedtest(password);
       }
-      setActionPrompt(null);
-      setPromptPassword('');
-      setPromptRebootConfirm('');
-    } catch (err: any) {
-      setPromptError(err?.message || 'Action failed');
+    } catch {
+      // Errors are surfaced on the action cards.
     } finally {
       setPromptBusy(false);
     }
@@ -1021,7 +1025,7 @@ export function App() {
       )}
 
       {tab === 'admin' && (
-        <section className="grid">
+        <section className="grid admin-grid">
           <div className="panel form admin-action-card">
             <h3>Restart LiveU Service</h3>
             <p className="admin-action-desc">Requires password confirmation.</p>
