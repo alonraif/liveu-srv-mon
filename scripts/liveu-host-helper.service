@@ -1,0 +1,15 @@
+[Unit]
+Description=LiveU Host Helper Daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/liveu-host-helperd.py
+Restart=always
+RestartSec=2
+User=root
+Group=root
+UMask=007
+
+[Install]
+WantedBy=multi-user.target

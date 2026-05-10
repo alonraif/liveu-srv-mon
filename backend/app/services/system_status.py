@@ -277,7 +277,7 @@ def get_server_version() -> str | None:
 
     try:
         result = subprocess.run(
-            ['sudo', '-n', '/opt/liveu/debug/version.sh'],
+            ['/opt/liveu/debug/version.sh'],
             capture_output=True,
             text=True,
             timeout=3,
@@ -328,19 +328,6 @@ def _get_liveu_status_from_systemctl() -> str | None:
     # Prefer systemd's own unit state to avoid false positives from unrelated
     # processes that happen to contain LiveU command-line markers.
     commands: list[list[str]] = []
-    if shutil.which('sudo'):
-        commands.append(
-            [
-                'sudo',
-                '-n',
-                '/usr/bin/env',
-                'SYSTEMCTL_FORCE_BUS=1',
-                '/usr/bin/systemctl',
-                'is-active',
-                'liveu',
-            ]
-        )
-        commands.append(['sudo', '-n', '/usr/bin/systemctl', 'is-active', 'liveu'])
     if shutil.which('systemctl'):
         commands.extend(
             [

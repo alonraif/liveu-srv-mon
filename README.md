@@ -58,7 +58,7 @@ Production-oriented local monitoring MVP for Ubuntu-based LiveU servers.
 
 - `backend/` FastAPI app
 - `frontend/` React app
-- `scripts/liveu-admin-action` fixed command runner (no arbitrary command execution)
+- `scripts/liveu-host-helper-client` fixed host-helper client (no arbitrary command execution)
 - `docker/entrypoint.sh` TLS cert bootstrap and startup checks
 - `Dockerfile`
 - `docker-compose.yml`
@@ -76,6 +76,7 @@ This script:
 
 - installs Docker Engine + Docker Compose plugin
 - installs required host packages
+- installs and enables `liveu-host-helper.service` on host
 - opens `tcp/8443` in iptables and persists the rule
 - builds and starts the app
 - verifies `https://127.0.0.1:8443/healthz`
@@ -99,6 +100,10 @@ cp .env.example .env
 2. Build and start:
 
 ```bash
+sudo install -m 0755 scripts/liveu-host-helperd.py /usr/local/sbin/liveu-host-helperd.py
+sudo install -m 0644 scripts/liveu-host-helper.service /etc/systemd/system/liveu-host-helper.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now liveu-host-helper.service
 docker compose up -d --build
 ```
 
@@ -152,36 +157,35 @@ Configured in `docker-compose.yml`:
 - `/logs:/host/logs:ro`
 - `/proc:/host/proc:ro`
 - `/sys:/host/sys:ro`
-- `/run/systemd:/run/systemd`
-- `/run/dbus/system_bus_socket:/run/dbus/system_bus_socket`
+- `/run/liveu-helper:/run/liveu-helper:ro`
 - `/etc/os-release:/host/etc/os-release:ro`
 - Named volume `liveu_monitor_data:/app/data`
 
-## Sudoers / Helper Setup
+## Host Helper Setup
 
-### Current MVP default
+### Current hardening model
 
-The container includes a strict sudoers allowlist for user `app`:
+The container no longer uses `sudo`, `nsenter`, host PID namespace, or privileged mode.
 
-- `sudo -n /usr/bin/systemctl restart liveu`
-- `sudo -n /usr/bin/systemctl is-active liveu`
-- `sudo -n /usr/bin/env SYSTEMCTL_FORCE_BUS=1 /usr/bin/systemctl restart liveu`
-- `sudo -n /usr/bin/env SYSTEMCTL_FORCE_BUS=1 /usr/bin/systemctl is-active liveu`
-- `sudo -n /usr/local/bin/liveu-config-read *`
-- `sudo -n /opt/liveu/debug/version.sh`
-- `sudo -n /sbin/reboot`
+Admin endpoints call `/usr/local/bin/liveu-host-helper-client`, which talks to a host-side helper over Unix socket:
 
-The API calls only `scripts/liveu-admin-action` logic copied to `/usr/local/bin/liveu-admin-action`.
+- socket path in container: `/run/liveu-helper/liveu-helper.sock`
+- override with env var: `LIVEU_HELPER_SOCKET_PATH`
 
-No arbitrary commands are accepted by the API.
+The host helper must enforce its own strict action allowlist (`restart-liveu`, `reboot`) and run as root on the host.
 
-### Optional host helper model
+No arbitrary commands are accepted by the API client path.
 
-If you require an explicit host-side helper script flow, use `scripts/liveu-host-helper.example.sh` as a template and bind that path into the container, then update `ADMIN_COMMAND_RUNNER` and sudoers accordingly.
+### Example helper template
+
+Use `scripts/liveu-host-helperd.py` + `scripts/liveu-host-helper.service` as the default secure implementation.
+`scripts/liveu-host-helper.example.sh` is a minimal command-only reference.
 
 ## Security Notes
 
 - No privileged Docker mode is used.
+- Container runs with `cap_drop: [ALL]` and `no-new-privileges:true`.
+- Container root filesystem is read-only (`read_only: true`).
 - Only host port `8443` is exposed.
 - App uses HTTPS only.
 - Session cookie is `HttpOnly + Secure + SameSite=Strict`.
@@ -200,8 +204,8 @@ If you require an explicit host-side helper script flow, use `scripts/liveu-host
 - Confirm host firewall allows `8443/tcp`
 
 2. Admin actions fail (`restart-liveu` or `reboot`)
-- Verify host supports systemd command path from this container context
-- Verify mounted `/run/systemd` and `/run/dbus/system_bus_socket`
+- Verify host helper service is running and listening on `/run/liveu-helper/liveu-helper.sock`
+- Verify docker bind mount `/run/liveu-helper:/run/liveu-helper:ro`
 - Validate service name is exactly `liveu`
 
 3. LiveU config missing in UI

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+action="${1:-}"
+if [[ -z "${action}" ]]; then
+  echo "Usage: liveu-host-helper-client <restart-liveu|reboot>" >&2
+  exit 2
+fi
+
+case "$action" in
+  restart-liveu|reboot)
+    ;;
+  *)
+    echo "Unsupported action: ${action}" >&2
+    exit 2
+    ;;
+esac
+
+socket_path="${LIVEU_HELPER_SOCKET_PATH:-/run/liveu-helper/liveu-helper.sock}"
+
+python3 - "$socket_path" "$action" <<'PY'
+import json
+import socket
+import sys
+
+sock_path, action = sys.argv[1], sys.argv[2]
+request = {"action": action}
+
+try:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(10.0)
+        client.connect(sock_path)
+        client.sendall((json.dumps(request) + "\n").encode("utf-8"))
+
+        chunks = []
+        while True:
+            data = client.recv(4096)
+            if not data:
+                break
+            chunks.append(data)
+except FileNotFoundError:
+    print(f"Host helper socket not found: {sock_path}", file=sys.stderr)
+    sys.exit(10)
+except (TimeoutError, socket.timeout):
+    print("Timed out waiting for host helper response", file=sys.stderr)
+    sys.exit(11)
+except OSError as exc:
+    print(f"Failed to talk to host helper: {exc}", file=sys.stderr)
+    sys.exit(12)
+
+payload = b"".join(chunks).decode("utf-8", "replace").strip()
+if not payload:
+    print("Empty response from host helper", file=sys.stderr)
+    sys.exit(13)
+
+try:
+    response = json.loads(payload)
+except json.JSONDecodeError as exc:
+    print(f"Invalid response from host helper: {exc}", file=sys.stderr)
+    sys.exit(14)
+
+ok = bool(response.get("ok"))
+output = str(response.get("output") or "").strip()
+error = str(response.get("error") or "").strip()
+
+if ok:
+    print(output or "OK")
+    sys.exit(0)
+
+print(error or output or "Host helper command failed", file=sys.stderr)
+sys.exit(15)
+PY

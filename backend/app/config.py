@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     public_ip_override: str | None = None
 
     # Restrictable fixed admin command path
-    admin_command_runner: str = '/usr/local/bin/liveu-admin-action'
+    admin_command_runner: str = '/usr/local/bin/liveu-host-helper-client'
     liveu_config_reader: str = '/usr/local/bin/liveu-config-read'
 
 

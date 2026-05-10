@@ -26,11 +26,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         python3-venv \
         python3-pip \
         openssl \
-        sudo \
         lm-sensors \
         speedtest-cli \
-        systemd \
-        util-linux \
         ca-certificates && \
     python3 -m venv "$VIRTUAL_ENV" && \
     "$VIRTUAL_ENV/bin/pip" install --upgrade pip
@@ -41,16 +38,14 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 COPY backend /app/backend
 COPY --from=frontend-builder /build/frontend/dist /app/backend/app/static
-COPY scripts/liveu-admin-action /usr/local/bin/liveu-admin-action
 COPY scripts/liveu-config-read /usr/local/bin/liveu-config-read
+COPY scripts/liveu-host-helper-client /usr/local/bin/liveu-host-helper-client
 COPY docker/entrypoint.sh /entrypoint.sh
 
-RUN chmod 755 /entrypoint.sh /usr/local/bin/liveu-admin-action /usr/local/bin/liveu-config-read \
+RUN chmod 755 /entrypoint.sh /usr/local/bin/liveu-host-helper-client /usr/local/bin/liveu-config-read \
     && useradd -m -u 10001 app \
     && mkdir -p /app/data \
-    && chown -R app:app /app /usr/local/bin/liveu-admin-action /usr/local/bin/liveu-config-read \
-    && echo "app ALL=(root) NOPASSWD: /usr/bin/systemctl restart liveu, /usr/bin/systemctl is-active liveu, /usr/bin/env SYSTEMCTL_FORCE_BUS=1 /usr/bin/systemctl restart liveu, /usr/bin/env SYSTEMCTL_FORCE_BUS=1 /usr/bin/systemctl is-active liveu, /usr/local/bin/liveu-config-read *, /sbin/reboot, /opt/liveu/debug/version.sh, /usr/bin/nsenter" > /etc/sudoers.d/liveu-monitor \
-    && chmod 0440 /etc/sudoers.d/liveu-monitor
+    && chown -R app:app /app /usr/local/bin/liveu-host-helper-client /usr/local/bin/liveu-config-read
 
 USER app
 

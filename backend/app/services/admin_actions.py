@@ -21,8 +21,6 @@ def _parse_systemctl_active_state(raw: str) -> str | None:
 
 def get_liveu_service_status_from_host() -> str:
     commands = [
-        ['sudo', '-n', '/usr/bin/env', 'SYSTEMCTL_FORCE_BUS=1', '/usr/bin/systemctl', 'is-active', 'liveu'],
-        ['sudo', '-n', '/usr/bin/systemctl', 'is-active', 'liveu'],
         ['systemctl', 'is-active', 'liveu'],
         ['systemctl', 'show', '--property', 'ActiveState', '--value', 'liveu'],
     ]

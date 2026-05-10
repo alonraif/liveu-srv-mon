@@ -4,8 +4,6 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: liveu-server-monitor
-    privileged: true
-    pid: host
     restart: unless-stopped
     env_file:
       - .env
@@ -20,13 +18,14 @@ services:
       - /logs:/host/logs:ro
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
-      - /run/systemd:/run/systemd
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
       - /etc/os-release:/host/etc/os-release:ro
+      - /run/liveu-helper:/run/liveu-helper:ro
       - liveu_monitor_data:/app/data
     security_opt:
-      - apparmor=unconfined
-    read_only: false
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
     tmpfs:
       - /tmp
 
