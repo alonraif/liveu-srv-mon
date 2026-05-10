@@ -52,6 +52,15 @@ class IdentityResponse(BaseModel):
     server_type: str
 
 
+class LiveuConfigResponse(BaseModel):
+    identity: IdentityResponse
+    server_type: str
+    network: dict[str, dict[str, Any]]
+    core: dict[str, Any]
+    sections: dict[str, dict[str, Any]]
+    role_config: dict[str, Any]
+
+
 class GatherLogsResponse(BaseModel):
     bundle_id: str
     filename: str
