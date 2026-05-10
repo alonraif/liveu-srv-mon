@@ -26,12 +26,13 @@ def restart_liveu(
     db: Session = Depends(get_db),
 ):
     client_ip = get_client_ip(request)
-    if critical_action_limiter.is_limited(f'restart-liveu:{client_ip}:{ctx.user.username}'):
+    limiter_key = f'restart-liveu:{client_ip}:{ctx.user.username}'
+    if critical_action_limiter.is_limited(limiter_key):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail='Too many restart attempts')
+    critical_action_limiter.register_attempt(limiter_key)
 
     if not verify_password(payload.password, ctx.user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Password confirmation failed')
-    critical_action_limiter.register_attempt(f'restart-liveu:{client_ip}:{ctx.user.username}')
     ctx.session.last_reauth_at = datetime.utcnow()
     db.add(ctx.session)
     db.commit()
@@ -67,14 +68,15 @@ def reboot(
     db: Session = Depends(get_db),
 ):
     client_ip = get_client_ip(request)
-    if critical_action_limiter.is_limited(f'reboot:{client_ip}:{ctx.user.username}'):
+    limiter_key = f'reboot:{client_ip}:{ctx.user.username}'
+    if critical_action_limiter.is_limited(limiter_key):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail='Too many reboot attempts')
+    critical_action_limiter.register_attempt(limiter_key)
 
     if payload.confirmation != 'REBOOT':
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Confirmation text must be exactly 'REBOOT'")
     if not verify_password(payload.password, ctx.user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Password confirmation failed')
-    critical_action_limiter.register_attempt(f'reboot:{client_ip}:{ctx.user.username}')
     ctx.session.last_reauth_at = datetime.utcnow()
     db.add(ctx.session)
     db.commit()

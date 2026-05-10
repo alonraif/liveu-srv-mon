@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import socket
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -12,6 +13,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 
 SOCKET_PATH = Path("/run/liveu-helper/liveu-helper.sock")
 SOCKET_DIR = SOCKET_PATH.parent
+SOCKET_GID = int(os.environ.get("LIVEU_HELPER_SOCKET_GID", "10001"))
+ALLOWED_UID = int(os.environ.get("LIVEU_HELPER_ALLOWED_UID", "10001"))
 ALLOWED_ACTIONS = {
     "restart-liveu": ["/usr/bin/systemctl", "restart", "liveu"],
     "reboot": ["/sbin/reboot"],
@@ -51,12 +54,20 @@ def _serve() -> int:
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as srv:
         srv.bind(str(SOCKET_PATH))
-        # Allow non-root container user to connect without host PID/capabilities.
-        os.chmod(SOCKET_PATH, 0o666)
+        os.chown(SOCKET_PATH, 0, SOCKET_GID)
+        os.chmod(SOCKET_PATH, 0o660)
         srv.listen(16)
         while True:
             conn, _ = srv.accept()
             with conn:
+                # Restrict callers to the container app user by UID.
+                raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+                _pid, uid, gid = struct.unpack("3i", raw)
+                if uid != ALLOWED_UID:
+                    logger.warning("Rejected helper request from uid=%s gid=%s", uid, gid)
+                    response = {"ok": False, "error": "forbidden peer credentials"}
+                    conn.sendall((json.dumps(response) + "\n").encode("utf-8"))
+                    continue
                 try:
                     raw = conn.recv(4096)
                 except OSError:

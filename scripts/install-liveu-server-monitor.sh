@@ -133,6 +133,9 @@ if [[ ! -f .env ]]; then
   echo "Created .env from .env.example"
 fi
 
+generated_initial_admin=0
+generated_initial_monitor=0
+
 if ! grep -q '^INITIAL_ADMIN_PASSWORD=' .env; then
   echo 'INITIAL_ADMIN_PASSWORD=' >> .env
 fi
@@ -144,6 +147,7 @@ current_monitor_initial="$(grep '^INITIAL_MONITOR_PASSWORD=' .env | tail -n1 | c
 if [[ -z "${current_initial}" ]]; then
   generated_password="$(openssl rand -base64 24 | tr -d '\n' | tr '/+' 'AB')"
   sed -i "s|^INITIAL_ADMIN_PASSWORD=.*$|INITIAL_ADMIN_PASSWORD=${generated_password}|" .env
+  generated_initial_admin=1
   echo "Generated INITIAL_ADMIN_PASSWORD in .env for first startup."
   echo "Temporary initial administrator password: ${generated_password}"
   echo "Change it immediately after first login."
@@ -151,10 +155,16 @@ fi
 if [[ -z "${current_monitor_initial}" ]]; then
   generated_monitor_password="$(openssl rand -base64 24 | tr -d '\n' | tr '/+' 'CD')"
   sed -i "s|^INITIAL_MONITOR_PASSWORD=.*$|INITIAL_MONITOR_PASSWORD=${generated_monitor_password}|" .env
+  generated_initial_monitor=1
   echo "Generated INITIAL_MONITOR_PASSWORD in .env for first startup."
   echo "Temporary initial monitor password: ${generated_monitor_password}"
   echo "Change it immediately after first login."
 fi
+
+if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
+  chown "${SUDO_USER}:${SUDO_USER}" .env || true
+fi
+chmod 0640 .env
 
 echo "[7/9] Validating expected host mounts..."
 check_mount_path() {
@@ -181,6 +191,21 @@ echo "[9/9] Waiting for health endpoint..."
 for i in {1..30}; do
   if curl -kfsS https://127.0.0.1:8443/healthz >/dev/null 2>&1; then
     echo "Health check passed: https://127.0.0.1:8443/healthz"
+
+    if [[ "${generated_initial_admin}" -eq 1 || "${generated_initial_monitor}" -eq 1 ]]; then
+      echo "Scrubbing one-time INITIAL_* bootstrap passwords from .env..."
+      sed -i "s|^INITIAL_ADMIN_PASSWORD=.*$|INITIAL_ADMIN_PASSWORD=|" .env
+      sed -i "s|^INITIAL_MONITOR_PASSWORD=.*$|INITIAL_MONITOR_PASSWORD=|" .env
+      echo "Restarting container to drop bootstrap passwords from runtime environment..."
+      docker compose up -d --force-recreate
+      if ! curl -kfsS https://127.0.0.1:8443/healthz >/dev/null 2>&1; then
+        echo "Post-scrub health check failed."
+        docker compose logs --tail=120 liveu-server-monitor || true
+        exit 1
+      fi
+      echo "Bootstrap passwords removed from .env and runtime environment."
+    fi
+
     docker compose ps
     echo "Install complete. Open: https://<SERVER_IP>:8443"
     exit 0
