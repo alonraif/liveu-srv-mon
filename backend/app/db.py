@@ -41,6 +41,15 @@ def ensure_schema_migrations() -> None:
                 continue
             conn.execute(text(f'ALTER TABLE metric_samples ADD COLUMN {column_name} {column_type}'))
 
+        session_exists = conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+        ).fetchone()
+        if session_exists:
+            session_rows = conn.execute(text('PRAGMA table_info(sessions)')).fetchall()
+            session_cols = {row[1] for row in session_rows}
+            if 'last_reauth_at' not in session_cols:
+                conn.execute(text('ALTER TABLE sessions ADD COLUMN last_reauth_at DATETIME'))
+
 
 def get_db():
     db = SessionLocal()

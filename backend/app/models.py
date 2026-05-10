@@ -30,6 +30,7 @@ class Session(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_reauth_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped['User'] = relationship(back_populates='sessions')
 

@@ -2,6 +2,7 @@ from datetime import datetime
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from .config import get_settings
 from .db import get_db
@@ -52,7 +53,11 @@ def get_auth_context(request: Request, db: Session = Depends(get_db)) -> AuthCon
 
     session.last_seen_at = now
     db.add(session)
-    db.commit()
+    try:
+        db.commit()
+    except StaleDataError:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid session') from None
 
     return AuthContext(user=user, session=session)
 
@@ -65,9 +70,23 @@ def require_admin(ctx: AuthContext = Depends(get_auth_context)) -> AuthContext:
     return ctx
 
 
+def require_monitor_or_admin(ctx: AuthContext = Depends(get_auth_context)) -> AuthContext:
+    if ctx.user.role not in {'administrator', 'monitor'}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Monitor or admin role required')
+    if ctx.user.must_change_password:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Password change required')
+    return ctx
+
+
 def allow_admin_with_password_change(ctx: AuthContext = Depends(get_auth_context)) -> AuthContext:
     if ctx.user.role != 'administrator':
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Admin role required')
+    return ctx
+
+
+def allow_user_with_password_change(ctx: AuthContext = Depends(get_auth_context)) -> AuthContext:
+    if ctx.user.role not in {'administrator', 'monitor'}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Monitor or admin role required')
     return ctx
 
 
@@ -82,3 +101,14 @@ def validate_csrf(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Missing CSRF token')
     if cookie_token != x_csrf_token or ctx.session.csrf_token != x_csrf_token:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Invalid CSRF token')
+
+
+def require_recent_reauth(ctx: AuthContext = Depends(require_admin)) -> AuthContext:
+    settings = get_settings()
+    now = datetime.utcnow()
+    last = ctx.session.last_reauth_at
+    if not last:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Recent password re-authentication required')
+    if (now - last).total_seconds() > settings.admin_reauth_window_seconds:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Re-authentication window expired')
+    return ctx

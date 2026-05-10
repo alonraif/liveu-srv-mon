@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 import json
+import logging
 import os
 import socket
 import subprocess
 import sys
 from pathlib import Path
 
+logger = logging.getLogger("liveu-host-helperd")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+
 SOCKET_PATH = Path("/run/liveu-helper/liveu-helper.sock")
 SOCKET_DIR = SOCKET_PATH.parent
 ALLOWED_ACTIONS = {
     "restart-liveu": ["/usr/bin/systemctl", "restart", "liveu"],
     "reboot": ["/sbin/reboot"],
+    "liveu-config-show": ["/bin/bash", "-lc", "liveu-config --show"],
 }
 
 
@@ -24,7 +29,7 @@ def _handle_action(action: str) -> tuple[bool, str]:
             command,
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=30 if action in {"restart-liveu", "reboot"} else 15,
             check=False,
         )
     except (OSError, subprocess.SubprocessError) as exc:
@@ -32,7 +37,9 @@ def _handle_action(action: str) -> tuple[bool, str]:
 
     output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
     if result.returncode != 0:
+        logger.warning("Action '%s' failed rc=%s output=%s", action, result.returncode, output[:1000])
         return False, output or f"command failed with exit code {result.returncode}"
+    logger.info("Action '%s' succeeded", action)
     return True, output or "OK"
 
 
@@ -44,7 +51,8 @@ def _serve() -> int:
 
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as srv:
         srv.bind(str(SOCKET_PATH))
-        os.chmod(SOCKET_PATH, 0o660)
+        # Allow non-root container user to connect without host PID/capabilities.
+        os.chmod(SOCKET_PATH, 0o666)
         srv.listen(16)
         while True:
             conn, _ = srv.accept()

@@ -7,6 +7,7 @@ INPUT_COMMENT="${INPUT_COMMENT:-LIVEU_UI_INPUT_8443}"
 FWD_IN_COMMENT="${FWD_IN_COMMENT:-LIVEU_UI_FWD_IN_8443}"
 FWD_OUT_COMMENT="${FWD_OUT_COMMENT:-LIVEU_UI_FWD_OUT_8443}"
 PUBLIC_IP_CACHE_FILE="${PUBLIC_IP_CACHE_FILE:-/tmp/liveu-public-ip.txt}"
+SUBNET_COMMENT="${SUBNET_COMMENT:-LIVEU_UI_INPUT_SUBNET_8443}"
 
 ensure_rule() {
   local chain="$1"
@@ -14,6 +15,22 @@ ensure_rule() {
   if ! iptables -C "$chain" "$@" 2>/dev/null; then
     iptables -I "$chain" 1 "$@"
   fi
+}
+
+delete_rules_by_comment() {
+  local chain="$1"
+  local comment="$2"
+  local line rule_spec
+  while IFS= read -r line; do
+    [[ "$line" == "-A ${chain}"* ]] || continue
+    [[ "$line" == *"--comment"*"$comment"* ]] || continue
+    rule_spec="${line#-A ${chain} }"
+    delete_rule_spec "$chain" "$rule_spec"
+  done < <(iptables -S "$chain")
+}
+
+detect_eth_subnets() {
+  ip -o -4 addr show up | awk '$2 ~ /^eth[0-9]+$/ {print $4}' | sort -u
 }
 
 delete_rule_spec() {
@@ -87,8 +104,17 @@ PY
   fi
 }
 
-# 1) Ensure host accepts inbound TCP/8443.
-ensure_rule INPUT -p tcp --dport "$PORT" -m comment --comment "$INPUT_COMMENT" -j ACCEPT
+# 1) Ensure host accepts inbound TCP/8443 only from local ETH subnets.
+delete_rules_by_comment INPUT "$INPUT_COMMENT"
+delete_rules_by_comment INPUT "$SUBNET_COMMENT"
+mapfile -t eth_subnets < <(detect_eth_subnets)
+if [[ "${#eth_subnets[@]}" -eq 0 ]]; then
+  echo "No active eth* IPv4 subnets detected; refusing to open tcp/${PORT}" >&2
+  exit 1
+fi
+for subnet in "${eth_subnets[@]}"; do
+  ensure_rule INPUT -p tcp -s "$subnet" --dport "$PORT" -m comment --comment "$SUBNET_COMMENT" -j ACCEPT
+done
 
 # 2) Ensure forwarding rules for the current UI container IP.
 container_ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER_NAME" 2>/dev/null || true)"

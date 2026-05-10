@@ -59,6 +59,8 @@ class LiveuConfigResponse(BaseModel):
     core: dict[str, Any]
     sections: dict[str, dict[str, Any]]
     role_config: dict[str, Any]
+    mmh: dict[str, Any] | None = None
+    ingest: dict[str, Any] | None = None
 
 
 class GatherLogsResponse(BaseModel):
@@ -85,6 +87,10 @@ class SpeedtestResultResponse(BaseModel):
     server_country: str
     server_host: str
     public_ip: str
+
+
+class SpeedtestRequest(BaseModel):
+    password: str | None = None
 
 
 class ApiError(BaseModel):

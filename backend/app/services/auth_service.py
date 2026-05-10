@@ -9,18 +9,40 @@ from ..security import hash_password
 from .audit import write_audit
 
 
-def ensure_admin_user(db: Session) -> None:
+def ensure_default_users(db: Session) -> None:
     settings = get_settings()
     admin = db.query(User).filter(User.username == settings.default_admin_username).first()
-    if not admin:
-        admin = User(
-            username=settings.default_admin_username,
-            password_hash=hash_password(settings.default_admin_temp_password),
-            role='administrator',
-            must_change_password=True,
+    monitor = db.query(User).filter(User.username == settings.default_monitor_username).first()
+    if admin and monitor:
+        return
+
+    initial_admin = (settings.initial_admin_password or '').strip()
+    initial_monitor = (settings.initial_monitor_password or '').strip()
+    if len(initial_admin) < 12 or len(initial_monitor) < 12:
+        raise RuntimeError(
+            'Initial user passwords are required on first startup. '
+            'Set INITIAL_ADMIN_PASSWORD and INITIAL_MONITOR_PASSWORD (minimum 12 characters each).'
         )
-        db.add(admin)
-        db.commit()
+
+    if not admin:
+        db.add(
+            User(
+                username=settings.default_admin_username,
+                password_hash=hash_password(initial_admin),
+                role='administrator',
+                must_change_password=True,
+            )
+        )
+    if not monitor:
+        db.add(
+            User(
+                username=settings.default_monitor_username,
+                password_hash=hash_password(initial_monitor),
+                role='monitor',
+                must_change_password=True,
+            )
+        )
+    db.commit()
 
 
 def apply_admin_password_reset_if_requested(db: Session) -> bool:

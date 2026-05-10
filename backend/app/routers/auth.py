@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_db
-from ..deps import allow_admin_with_password_change, get_client_ip, validate_csrf
+from ..deps import allow_user_with_password_change, get_client_ip, validate_csrf
 from ..models import Session as UserSession
 from ..models import User
 from ..schemas import ChangePasswordRequest, LoginRequest, LoginResponse
@@ -107,7 +107,7 @@ def change_password(
     request: Request,
     response: Response,
     _csrf: None = Depends(validate_csrf),
-    ctx=Depends(allow_admin_with_password_change),
+    ctx=Depends(allow_user_with_password_change),
     db: Session = Depends(get_db),
 ):
     user = ctx.user
@@ -138,7 +138,7 @@ def change_password(
 def logout(
     request: Request,
     response: Response,
-    ctx=Depends(allow_admin_with_password_change),
+    ctx=Depends(allow_user_with_password_change),
     _csrf: None = Depends(validate_csrf),
     db: Session = Depends(get_db),
 ):
@@ -158,5 +158,5 @@ def logout(
 
 
 @router.get('/me')
-def me(ctx=Depends(allow_admin_with_password_change)):
+def me(ctx=Depends(allow_user_with_password_change)):
     return {'username': ctx.user.username, 'role': ctx.user.role, 'must_change_password': ctx.user.must_change_password}

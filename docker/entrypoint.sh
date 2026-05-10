@@ -21,4 +21,13 @@ if [[ -n "${RESET_ADMIN_PASSWORD:-}" ]]; then
   echo "[entrypoint] Remove RESET_ADMIN_PASSWORD from .env after first successful startup."
 fi
 
+if [[ ! -f "/app/data/liveu_monitor.db" ]]; then
+  admin_initial="${INITIAL_ADMIN_PASSWORD:-}"
+  monitor_initial="${INITIAL_MONITOR_PASSWORD:-}"
+  if [[ "${#admin_initial}" -lt 12 || "${#monitor_initial}" -lt 12 ]]; then
+    echo "[entrypoint] Initial startup requires INITIAL_ADMIN_PASSWORD and INITIAL_MONITOR_PASSWORD (minimum 12 characters each)." >&2
+    exit 1
+  fi
+fi
+
 exec "$@"

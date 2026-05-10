@@ -3,7 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..deps import get_client_ip, require_admin, validate_csrf
+from ..deps import get_client_ip, require_monitor_or_admin, validate_csrf
 from ..schemas import GatherLogsResponse
 from ..services.audit import write_audit
 from ..services.logs_service import gather_logs_archive, get_bundle_file_path
@@ -15,7 +15,7 @@ router = APIRouter(prefix='/api/logs', tags=['logs'])
 def gather_logs(
     request: Request,
     _csrf: None = Depends(validate_csrf),
-    ctx=Depends(require_admin),
+    ctx=Depends(require_monitor_or_admin),
     db: Session = Depends(get_db),
 ):
     try:
@@ -34,7 +34,7 @@ def gather_logs(
 
 
 @router.get('/download/{bundle_id}')
-def download_logs(bundle_id: str, request: Request, ctx=Depends(require_admin), db: Session = Depends(get_db)):
+def download_logs(bundle_id: str, request: Request, ctx=Depends(require_monitor_or_admin), db: Session = Depends(get_db)):
     try:
         path, filename = get_bundle_file_path(db, bundle_id)
     except FileNotFoundError as exc:

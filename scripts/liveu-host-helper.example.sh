@@ -11,6 +11,9 @@ case "$action" in
   reboot)
     exec /sbin/reboot
     ;;
+  liveu-config-show)
+    exec /bin/bash -lc 'liveu-config --show'
+    ;;
   *)
     echo "unsupported action" >&2
     exit 2

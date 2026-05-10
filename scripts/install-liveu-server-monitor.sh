@@ -84,13 +84,27 @@ else
   fi
 fi
 
-echo "[4/9] Opening TCP 8443 in iptables..."
-if iptables -C INPUT -p tcp --dport 8443 -j ACCEPT 2>/dev/null; then
-  echo "iptables rule for 8443 already exists."
-else
-  iptables -I INPUT -p tcp --dport 8443 -j ACCEPT
-  echo "Added iptables INPUT rule for tcp/8443"
+echo "[4/9] Restricting TCP 8443 to local ETH subnets..."
+# Remove legacy broad rule if present.
+while iptables -D INPUT -p tcp --dport 8443 -j ACCEPT 2>/dev/null; do :; done
+# Remove previously managed subnet rules.
+while IFS= read -r line; do
+  [[ "$line" == "-A INPUT"* ]] || continue
+  [[ "$line" == *"LIVEU_UI_INPUT_SUBNET_8443"* ]] || continue
+  rule_spec="${line#-A INPUT }"
+  # shellcheck disable=SC2086
+  iptables -D INPUT $rule_spec || true
+done < <(iptables -S INPUT)
+
+mapfile -t eth_subnets < <(ip -o -4 addr show up | awk '$2 ~ /^eth[0-9]+$/ {print $4}' | sort -u)
+if [[ "${#eth_subnets[@]}" -eq 0 ]]; then
+  echo "No active eth* IPv4 subnets found; refusing to expose tcp/8443."
+  exit 1
 fi
+for subnet in "${eth_subnets[@]}"; do
+  iptables -I INPUT 1 -p tcp -s "$subnet" --dport 8443 -m comment --comment LIVEU_UI_INPUT_SUBNET_8443 -j ACCEPT
+  echo "Added restricted INPUT rule for tcp/8443 from ${subnet}"
+done
 
 if command -v netfilter-persistent >/dev/null 2>&1; then
   netfilter-persistent save
@@ -117,6 +131,29 @@ cd "${REPO_ROOT}"
 if [[ ! -f .env ]]; then
   cp .env.example .env
   echo "Created .env from .env.example"
+fi
+
+if ! grep -q '^INITIAL_ADMIN_PASSWORD=' .env; then
+  echo 'INITIAL_ADMIN_PASSWORD=' >> .env
+fi
+if ! grep -q '^INITIAL_MONITOR_PASSWORD=' .env; then
+  echo 'INITIAL_MONITOR_PASSWORD=' >> .env
+fi
+current_initial="$(grep '^INITIAL_ADMIN_PASSWORD=' .env | tail -n1 | cut -d= -f2-)"
+current_monitor_initial="$(grep '^INITIAL_MONITOR_PASSWORD=' .env | tail -n1 | cut -d= -f2-)"
+if [[ -z "${current_initial}" ]]; then
+  generated_password="$(openssl rand -base64 24 | tr -d '\n' | tr '/+' 'AB')"
+  sed -i "s|^INITIAL_ADMIN_PASSWORD=.*$|INITIAL_ADMIN_PASSWORD=${generated_password}|" .env
+  echo "Generated INITIAL_ADMIN_PASSWORD in .env for first startup."
+  echo "Temporary initial administrator password: ${generated_password}"
+  echo "Change it immediately after first login."
+fi
+if [[ -z "${current_monitor_initial}" ]]; then
+  generated_monitor_password="$(openssl rand -base64 24 | tr -d '\n' | tr '/+' 'CD')"
+  sed -i "s|^INITIAL_MONITOR_PASSWORD=.*$|INITIAL_MONITOR_PASSWORD=${generated_monitor_password}|" .env
+  echo "Generated INITIAL_MONITOR_PASSWORD in .env for first startup."
+  echo "Temporary initial monitor password: ${generated_monitor_password}"
+  echo "Change it immediately after first login."
 fi
 
 echo "[7/9] Validating expected host mounts..."

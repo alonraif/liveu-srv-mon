@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     session_idle_timeout_seconds: int = 60 * 10
 
     default_admin_username: str = 'admin'
-    default_admin_temp_password: str = 'ChangeMeNow!123'
+    default_monitor_username: str = 'monitor'
+    initial_admin_password: str | None = None
+    initial_monitor_password: str | None = None
     reset_admin_password: str | None = None
+    admin_reauth_window_seconds: int = 300
     trust_x_forwarded_for: bool = False
     enable_api_docs: bool = False
 

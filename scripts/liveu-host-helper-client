@@ -3,12 +3,12 @@ set -euo pipefail
 
 action="${1:-}"
 if [[ -z "${action}" ]]; then
-  echo "Usage: liveu-host-helper-client <restart-liveu|reboot>" >&2
+  echo "Usage: liveu-host-helper-client <restart-liveu|reboot|liveu-config-show>" >&2
   exit 2
 fi
 
 case "$action" in
-  restart-liveu|reboot)
+  restart-liveu|reboot|liveu-config-show)
     ;;
   *)
     echo "Unsupported action: ${action}" >&2

@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import get_settings
 from .db import Base, SessionLocal, engine, ensure_schema_migrations
 from .routers import admin, audit, auth, liveu, logs, network, status as status_router
-from .services.auth_service import apply_admin_password_reset_if_requested, cleanup_expired_sessions, ensure_admin_user
+from .services.auth_service import apply_admin_password_reset_if_requested, cleanup_expired_sessions, ensure_default_users
 from .services.logs_service import cleanup_expired_log_bundles
 from .services.metrics_service import MetricsCollector, collect_and_store_metrics
 
@@ -26,10 +26,10 @@ async def lifespan(_app: FastAPI):
     ensure_schema_migrations()
 
     with SessionLocal() as db:
-        ensure_admin_user(db)
+        reset_applied = apply_admin_password_reset_if_requested(db)
+        ensure_default_users(db)
         cleanup_expired_sessions(db)
         cleanup_expired_log_bundles(db)
-        reset_applied = apply_admin_password_reset_if_requested(db)
         if reset_applied:
             logger.warning('RESET_ADMIN_PASSWORD was applied. Remove it from runtime configuration after first startup.')
 

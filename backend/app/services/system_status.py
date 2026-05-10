@@ -131,35 +131,44 @@ def get_disk_usage() -> list[dict]:
 def get_disk_usage_df() -> list[dict]:
     settings = get_settings()
     host_root = settings.host_root_dir
+    host_logs = settings.host_logs_dir
 
-    host_paths = [
-        '/run',
-        '/',
-        '/dev/shm',
-        '/run/lock',
-        '/boot',
-        '/logs',
-        '/boot/efi',
-        '/storage',
-        '/media/sdb1',
-        '/run/user/1000',
-    ]
+    # Keep this aligned with a practical `df -h` host view and avoid
+    # container-internal mounts (overlay, /proc, /sys thermal tmpfs, etc.).
+    keep_mount_map = {
+        f'{host_root}': '/',
+        f'{host_root}/run': '/run',
+        f'{host_root}/dev/shm': '/dev/shm',
+        f'{host_root}/run/lock': '/run/lock',
+        f'{host_logs}': '/logs',
+        f'{host_root}/boot': '/boot',
+        f'{host_root}/storage': '/storage',
+        f'{host_root}/boot/efi': '/boot/efi',
+        f'{host_root}/run/user/1000': '/run/user/1000',
+        f'{host_root}/media/sdb1': '/media/sdb1',
+    }
 
     if host_root.exists():
-        target_args = [f'{host_root}{path}' for path in host_paths]
-        rows = _run_df_h(target_args)
+        # Read full df output and then filter/match. This avoids failures when
+        # one optional host path (e.g. /run/user/1000) is absent.
+        rows = _run_df_h([])
         if rows:
             normalized_rows: list[dict] = []
-            host_root_prefix = str(host_root)
             for row in rows:
                 mounted = row['mounted_on']
-                if mounted.startswith(host_root_prefix):
-                    mapped = mounted[len(host_root_prefix):] or '/'
-                    row['mounted_on'] = mapped
+                mapped = keep_mount_map.get(mounted)
+                if not mapped:
+                    continue
+                row['mounted_on'] = mapped
                 normalized_rows.append(row)
+            normalized_rows.sort(key=lambda item: item['mounted_on'])
             return normalized_rows
 
-    return _run_df_h([])
+    # Fallback when host-root mount is unavailable.
+    fallback = _run_df_h([])
+    filtered = [row for row in fallback if row.get('mounted_on') in {'/', '/run', '/dev/shm', '/run/lock', '/logs', '/boot', '/storage', '/boot/efi', '/run/user/1000', '/media/sdb1'}]
+    filtered.sort(key=lambda item: item['mounted_on'])
+    return filtered
 
 
 def _run_df_h(targets: list[str]) -> list[dict]:

@@ -31,3 +31,7 @@ class LoginRateLimiter:
             q.popleft()
         if not q:
             self.attempts.pop(key, None)
+
+
+class SlidingWindowRateLimiter(LoginRateLimiter):
+    pass
