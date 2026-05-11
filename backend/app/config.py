@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     csrf_cookie_name: str = 'liveu_csrf'
     session_ttl_seconds: int = 60 * 60 * 12
     session_idle_timeout_seconds: int = 60 * 10
+    session_touch_interval_seconds: int = 60
 
     default_admin_username: str = 'admin'
     default_monitor_username: str = 'monitor'

@@ -160,7 +160,7 @@ def get_history(db: Session, days: int = 7) -> list[dict]:
         .all()
     )
 
-    return [
+    history = [
         {
             'timestamp': s.timestamp,
             'cpu_percent': s.cpu_percent,
@@ -172,3 +172,45 @@ def get_history(db: Session, days: int = 7) -> list[dict]:
         }
         for s in samples
     ]
+    return history
+
+
+def get_history_since(db: Session, since: datetime) -> list[dict]:
+    samples = (
+        db.query(MetricSample)
+        .filter(MetricSample.timestamp >= since)
+        .order_by(MetricSample.timestamp.asc())
+        .all()
+    )
+
+    history = [
+        {
+            'timestamp': s.timestamp,
+            'cpu_percent': s.cpu_percent,
+            'memory_percent': s.memory_percent,
+            'temperature_c': s.temperature_c,
+            'network_interface': s.network_interface,
+            'rx_mbps': s.rx_mbps,
+            'tx_mbps': s.tx_mbps,
+        }
+        for s in samples
+    ]
+    return history
+
+
+def downsample_history(samples: list[dict], max_points: int) -> list[dict]:
+    if max_points <= 0:
+        return []
+    total = len(samples)
+    if total <= max_points:
+        return samples
+    if max_points == 1:
+        return [samples[-1]]
+
+    # Evenly pick points across the full range and always include both ends.
+    last_idx = total - 1
+    selected: list[dict] = []
+    for i in range(max_points):
+        idx = round(i * last_idx / (max_points - 1))
+        selected.append(samples[idx])
+    return selected

@@ -51,13 +51,15 @@ def get_auth_context(request: Request, db: Session = Depends(get_db)) -> AuthCon
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid session user')
 
-    session.last_seen_at = now
-    db.add(session)
-    try:
-        db.commit()
-    except StaleDataError:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid session') from None
+    # Throttle heartbeat writes to reduce DB churn under frequent polling.
+    if (now - session.last_seen_at).total_seconds() >= settings.session_touch_interval_seconds:
+        session.last_seen_at = now
+        db.add(session)
+        try:
+            db.commit()
+        except StaleDataError:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid session') from None
 
     return AuthContext(user=user, session=session)
 

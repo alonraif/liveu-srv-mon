@@ -7,30 +7,14 @@ import { apiFetch } from './api';
 import { AuditEntry, AuthState, Identity, NetworkInfo, SpeedtestResult, StatusCurrent, StatusHistory } from './types';
 
 type TabKey = 'overview' | 'liveu' | 'logs' | 'admin' | 'audit';
-type GraphWindowKey = '5m' | '10m' | '30m' | '1h' | '24h' | '7d';
 type AdminActionPrompt = 'restart' | 'reboot' | 'speedtest' | null;
 type LoginUserType = 'administrator' | 'monitor';
 const TAB_SESSION_KEY = 'liveu_tab_session';
 const TAB_ACTIVE_KEY = 'liveu_active_tab';
 const TAB_KEYS: TabKey[] = ['overview', 'liveu', 'logs', 'admin', 'audit'];
-const GRAPH_WINDOW_MS: Record<GraphWindowKey, number> = {
-  '5m': 5 * 60 * 1000,
-  '10m': 10 * 60 * 1000,
-  '30m': 30 * 60 * 1000,
-  '1h': 60 * 60 * 1000,
-  '24h': 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
-};
-const GRAPH_WINDOW_OPTIONS: Array<{ value: GraphWindowKey; label: string }> = [
-  { value: '5m', label: '5 minutes' },
-  { value: '10m', label: '10 minutes' },
-  { value: '30m', label: '30 minutes' },
-  { value: '1h', label: '1 hour' },
-  { value: '24h', label: '24 hours' },
-  { value: '7d', label: '7 days' },
-];
+const GRAPH_WINDOW_MS = 5 * 60 * 1000;
 const POLL_STATUS_MS = 5000;
-const POLL_HISTORY_MS = 1000;
+const POLL_HISTORY_MS = 15000;
 const POLL_NETWORK_MS = 10000;
 const POLL_LIVEU_MS = 5 * 60 * 1000;
 const POLL_AUDIT_MS = 15000;
@@ -95,7 +79,6 @@ export function App() {
   const [promptRebootConfirm, setPromptRebootConfirm] = useState('');
   const [promptError, setPromptError] = useState<string | null>(null);
   const [promptBusy, setPromptBusy] = useState(false);
-  const [graphWindow, setGraphWindow] = useState<GraphWindowKey>('5m');
   const loginUsername = loginUserType === 'administrator' ? 'admin' : 'monitor';
   const isMonitor = auth?.role === 'monitor';
 
@@ -146,7 +129,7 @@ export function App() {
 
   const loadStatusHistory = useCallback(async () => {
     try {
-      const hist = await apiFetch<StatusHistory>('/api/status/history?range=7d');
+      const hist = await apiFetch<StatusHistory>('/api/status/history?range=5m&max_points=300');
       setHistory(hist);
       setError(null);
     } catch (e: any) {
@@ -218,13 +201,13 @@ export function App() {
   }, [auth, loadStatusCurrent]);
 
   useEffect(() => {
-    if (!auth || auth.must_change_password) return;
+    if (!auth || auth.must_change_password || tab !== 'overview') return;
     loadStatusHistory();
     const timer = window.setInterval(() => {
       loadStatusHistory();
     }, POLL_HISTORY_MS);
     return () => window.clearInterval(timer);
-  }, [auth, loadStatusHistory]);
+  }, [auth, tab, loadStatusHistory]);
 
   useEffect(() => {
     if (!auth || auth.must_change_password) return;
@@ -288,15 +271,14 @@ export function App() {
   const windowedChartData = useMemo(() => {
     if (!chartData.length) return [];
     const latestTs = chartData[chartData.length - 1].ts;
-    const cutoff = latestTs - GRAPH_WINDOW_MS[graphWindow];
+    const cutoff = latestTs - GRAPH_WINDOW_MS;
     return chartData.filter((point) => point.ts >= cutoff);
-  }, [chartData, graphWindow]);
+  }, [chartData]);
 
   const xAxisDomain = useMemo(() => {
     const now = chartData.length ? chartData[chartData.length - 1].ts : Date.now();
-    const windowMs = GRAPH_WINDOW_MS[graphWindow];
-    return [now - windowMs, now];
-  }, [chartData, graphWindow]);
+    return [now - GRAPH_WINDOW_MS, now];
+  }, [chartData]);
 
   const liveuServiceStatus = status?.liveu_service_status || 'unknown';
   const graphNicName = status?.network_interface || windowedChartData[windowedChartData.length - 1]?.nic || 'N/A';
@@ -304,8 +286,6 @@ export function App() {
     liveuServiceStatus === 'active' ? 'badge-green' : liveuServiceStatus === 'unknown' ? 'badge-blue' : 'badge-red';
   const formatGraphTick = (ts: number) => {
     const date = new Date(ts);
-    if (graphWindow === '24h') return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    if (graphWindow === '7d') return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
@@ -779,16 +759,7 @@ export function App() {
           </div>
           <div className="panel chart-panel overview-graphs">
             <div className="graphs-header">
-              <h3>Graphs</h3>
-              <label className="graph-window-control">
-                <select value={graphWindow} onChange={(e) => setGraphWindow(e.target.value as GraphWindowKey)}>
-                  {GRAPH_WINDOW_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <h3>Graphs (Last 5 Minutes)</h3>
             </div>
             <div className="graphs-grid">
               <div className="panel graph-card">
