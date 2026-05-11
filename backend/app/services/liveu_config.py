@@ -337,6 +337,7 @@ def _extract_mmh_view(data: dict[str, Any]) -> dict[str, Any]:
                 'instance': instance,
                 'port': port,
                 'status': 'configured' if port is not None else 'unknown',
+                'ifb_port': None,
             }
         )
 
@@ -354,7 +355,19 @@ def _extract_mmh_view(data: dict[str, Any]) -> dict[str, Any]:
                     existing['port'] = parsed_port
                     existing['status'] = 'configured'
             else:
-                collectors.append({'instance': idx, 'port': parsed_port, 'status': 'configured'})
+                collectors.append({'instance': idx, 'port': parsed_port, 'status': 'configured', 'ifb_port': None})
+
+    ifb_ports = role_config.get('ifb ports')
+    if isinstance(ifb_ports, list):
+        for idx, raw_port in enumerate(ifb_ports, start=1):
+            parsed_port = _to_int_or_none(raw_port)
+            if parsed_port is None:
+                continue
+            existing = next((c for c in collectors if c.get('instance') == idx), None)
+            if existing:
+                existing['ifb_port'] = parsed_port
+            else:
+                collectors.append({'instance': idx, 'port': None, 'status': 'unknown', 'ifb_port': parsed_port})
 
     collectors.sort(key=lambda item: int(item.get('instance') or 0))
 

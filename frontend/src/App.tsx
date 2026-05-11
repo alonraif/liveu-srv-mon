@@ -1030,7 +1030,7 @@ export function App() {
                   <tr>
                     <th>Instance</th>
                     <th>UDP Port</th>
-                    <th>Status</th>
+                    <th>IFB Port</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1038,7 +1038,7 @@ export function App() {
                     <tr key={item.instance}>
                       <td>{item.instance}</td>
                       <td>{item.port ?? 'N/A'}</td>
-                      <td>{item.status || 'closed'}</td>
+                      <td>{item.ifb_port ?? 'N/A'}</td>
                     </tr>
                   ))}
                 </tbody>
