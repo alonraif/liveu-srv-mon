@@ -318,6 +318,11 @@ export function App() {
   }, [chartData]);
 
   const liveuServiceStatus = status?.liveu_service_status || 'unknown';
+  const detectedServerType = liveuConfig?.server_type || identity?.server_type || null;
+  const isServerTypeDetermined = Boolean(detectedServerType);
+  const isIngestServer = detectedServerType === 'Ingest';
+  const isMmhTransceiverServer = detectedServerType === 'MMH/Transceiver';
+  const isVideoReturnServer = detectedServerType === 'Video Return';
   const graphNicName = status?.network_interface || windowedChartData[windowedChartData.length - 1]?.nic || 'N/A';
   const liveuServiceBadgeClass =
     liveuServiceStatus === 'active' ? 'badge-green' : liveuServiceStatus === 'unknown' ? 'badge-blue' : 'badge-red';
@@ -1010,7 +1015,7 @@ export function App() {
             <p><strong>Server Type:</strong> {identity?.server_type || 'Unknown'}</p>
           </div>
 
-          {liveuConfig?.server_type === 'MMH/Transceiver' && (
+          {isServerTypeDetermined && isMmhTransceiverServer && (
             <div className="panel liveu-mmh">
               <h3>MMH / Transceiver Configuration</h3>
               <p><strong>MMH Instances:</strong> {liveuConfig?.mmh?.mmh_instances ?? '-'}</p>
@@ -1041,7 +1046,7 @@ export function App() {
             </div>
           )}
 
-          {liveuConfig?.server_type === 'Video Return' && (
+          {isServerTypeDetermined && isVideoReturnServer && (
             <div className="panel liveu-mmh">
               <h3>Video Return Configuration</h3>
               <p><strong>External Video Preview TCP Port:</strong> {liveuConfig?.role_config?.['external video preview tcp port']
@@ -1101,7 +1106,7 @@ export function App() {
             )}
           </div>
 
-          {liveuConfig?.server_type === 'Ingest' && (
+          {isServerTypeDetermined && isIngestServer && (
             <div className="panel liveu-mmh">
               <h3>Ingest Configuration</h3>
               <p className="ingest-port-line"><strong>External file server tcp port:</strong> {liveuConfig?.ingest?.external_file_server_tcp_port ?? 'N/A'}</p>
@@ -1136,7 +1141,7 @@ export function App() {
 
       {tab === 'admin' && (
         <section className="grid admin-grid">
-          {liveuConfig?.server_type !== 'Ingest' && (
+          {isServerTypeDetermined && !isIngestServer && (
             <div className="panel form admin-action-card">
               <h3>Advertised stream destination</h3>
               <p><strong>Configured IP:</strong> {advertisedIpStatus?.configured_ip || 'Public IP (no override)'}</p>
