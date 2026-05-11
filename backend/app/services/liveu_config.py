@@ -237,6 +237,70 @@ def _to_int_or_none(value: Any) -> int | None:
         return None
 
 
+def _read_host_file_via_reader(path: str) -> str | None:
+    settings = get_settings()
+    try:
+        result = subprocess.run(
+            [settings.liveu_config_reader, path],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return (result.stdout or '').strip('\n')
+
+
+def _strip_commented_lines(content: str) -> str:
+    filtered: list[str] = []
+    for line in content.splitlines():
+        if not line.strip():
+            continue
+        if line.lstrip().startswith('#'):
+            continue
+        filtered.append(line)
+    return '\n'.join(filtered).strip()
+
+
+def _extract_ingest_view(data: dict[str, Any]) -> dict[str, Any]:
+    role_config = data.get('role_config') or {}
+    raw_external_port = (
+        role_config.get('external file server tcp port')
+        or role_config.get('external File Server Tcp Port')
+        or role_config.get('EXTERNAL_FILE_SERVER_TCP_PORT')
+    )
+    external_port = _to_int_or_none(raw_external_port)
+    if external_port is None and raw_external_port is not None:
+        external_port = str(raw_external_port).strip() or None
+
+    file_paths = [
+        '/host/etc/liveu/ingest.py',
+        '/host/etc/liveu/ingest.hotfolderexposure.py',
+    ]
+    files: list[dict[str, Any]] = []
+    for path in file_paths:
+        raw = _read_host_file_via_reader(path)
+        if raw is None:
+            continue
+        sanitized = _strip_commented_lines(raw)
+        if not sanitized:
+            continue
+        files.append(
+            {
+                'path': path.replace('/host', ''),
+                'content': sanitized,
+            }
+        )
+
+    return {
+        'external_file_server_tcp_port': external_port,
+        'files': files,
+    }
+
+
 def _extract_mmh_view(data: dict[str, Any]) -> dict[str, Any]:
     host_liveu = Path('/host/etc/liveu')
     role_config = data.get('role_config') or {}
@@ -341,6 +405,8 @@ def get_liveu_config() -> dict[str, Any]:
         if parsed.get('identity', {}).get('base_unique_id'):
             if parsed.get('server_type') == ROLE_MMH:
                 parsed['mmh'] = _extract_mmh_view(parsed)
+            if parsed.get('server_type') == ROLE_INGEST:
+                parsed['ingest'] = _extract_ingest_view(parsed)
             return parsed
         logger.warning('liveu-config output parsed but missing base_unique_id; falling back to host files')
 
@@ -348,6 +414,8 @@ def get_liveu_config() -> dict[str, Any]:
     if fallback.get('identity', {}).get('base_unique_id'):
         if fallback.get('server_type') == ROLE_MMH:
             fallback['mmh'] = _extract_mmh_view(fallback)
+        if fallback.get('server_type') == ROLE_INGEST:
+            fallback['ingest'] = _extract_ingest_view(fallback)
         logger.info('Using fallback LiveU config from mounted host files')
         return fallback
     raise RuntimeError('LiveU configuration unavailable: liveu-config --show failed and host fallback files are missing')

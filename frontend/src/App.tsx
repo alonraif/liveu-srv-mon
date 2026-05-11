@@ -1093,28 +1093,15 @@ export function App() {
 
           {liveuConfig?.server_type === 'Ingest' && (
             <div className="panel liveu-mmh">
-              <h3>Ingest Configuration (Read-Only)</h3>
-              {(liveuConfig?.ingest?.port_candidates || []).length > 0 && (
-                <>
-                  <h4>Detected Port Constants</h4>
-                  <ul>
-                    {liveuConfig.ingest.port_candidates.map((p: any, idx: number) => (
-                      <li key={`${p.file}-${p.name}-${idx}`}>{p.name} = {p.value} ({p.file})</li>
-                    ))}
-                  </ul>
-                </>
-              )}
+              <h3>Ingest Configuration</h3>
+              <p className="ingest-port-line"><strong>External file server tcp port:</strong> {liveuConfig?.ingest?.external_file_server_tcp_port ?? 'N/A'}</p>
 
               {(liveuConfig?.ingest?.files || []).map((f: any) => (
-                <div key={f.path} className="code-wrap">
-                  <h4>{f.path}</h4>
-                  {!f.exists ? (
-                    <div className="muted">File not found</div>
-                  ) : (
-                    <pre>
-                      <code className="language-python">{f.content}</code>
-                    </pre>
-                  )}
+                <div key={f.path} className="ingest-file-block">
+                  <h4 className="ingest-file-title">{f.path}</h4>
+                  <pre className="ingest-pre">
+                    <code className="language-python">{f.content}</code>
+                  </pre>
                 </div>
               ))}
             </div>
@@ -1139,76 +1126,78 @@ export function App() {
 
       {tab === 'admin' && (
         <section className="grid admin-grid">
-          <div className="panel form admin-action-card">
-            <h3>Advertised stream destination</h3>
-            <p><strong>Configured IP:</strong> {advertisedIpStatus?.configured_ip || 'Public IP (no override)'}</p>
-            <p><strong>Current Public IP:</strong> {network?.public_ip || 'Unavailable'}</p>
-            <label>
-              Advertise
-              <select
-                value={advertisedIpMode}
-                onChange={(e) =>
-                  setAdvertisedIpMode(
-                    e.target.value === 'local' ? 'local' : e.target.value === 'custom' ? 'custom' : 'public'
-                  )
-                }
-                disabled={advertisedIpBusy}
-              >
-                <option value="public">Public IP</option>
-                <option value="local" disabled={!advertisedIpStatus || advertisedIpStatus.local_ip_options.length === 0}>
-                  Local IP
-                </option>
-                <option value="custom">Custom</option>
-              </select>
-            </label>
-            {advertisedIpMode === 'local' && (
+          {liveuConfig?.server_type !== 'Ingest' && (
+            <div className="panel form admin-action-card">
+              <h3>Advertised stream destination</h3>
+              <p><strong>Configured IP:</strong> {advertisedIpStatus?.configured_ip || 'Public IP (no override)'}</p>
+              <p><strong>Current Public IP:</strong> {network?.public_ip || 'Unavailable'}</p>
               <label>
-                Local IP
+                Advertise
                 <select
-                  value={advertisedIpSelected}
-                  onChange={(e) => setAdvertisedIpSelected(e.target.value)}
-                  disabled={advertisedIpBusy || !advertisedIpStatus || advertisedIpStatus.local_ip_options.length === 0}
+                  value={advertisedIpMode}
+                  onChange={(e) =>
+                    setAdvertisedIpMode(
+                      e.target.value === 'local' ? 'local' : e.target.value === 'custom' ? 'custom' : 'public'
+                    )
+                  }
+                  disabled={advertisedIpBusy}
                 >
-                  {(advertisedIpStatus?.local_ip_options || []).map((entry) => (
-                    <option key={`${entry.interface}-${entry.ip}`} value={entry.ip}>
-                      {entry.label}
-                    </option>
-                  ))}
+                  <option value="public">Public IP</option>
+                  <option value="local" disabled={!advertisedIpStatus || advertisedIpStatus.local_ip_options.length === 0}>
+                    Local IP
+                  </option>
+                  <option value="custom">Custom</option>
                 </select>
               </label>
-            )}
-            {advertisedIpMode === 'local' && (advertisedIpStatus?.local_ip_options || []).length === 0 && (
-              <div className="error">No local IPv4 options were detected on this host.</div>
-            )}
-            {advertisedIpMode === 'custom' && (
-              <label>
-                Custom IPv4
-                <input
-                  value={advertisedIpCustom}
-                  onChange={(e) => setAdvertisedIpCustom(e.target.value)}
-                  placeholder="e.g. 172.16.32.7"
-                  disabled={advertisedIpBusy}
-                />
-              </label>
-            )}
-            <button
-              className="inline-spinner-btn admin-action-btn"
-              disabled={
-                advertisedIpBusy ||
-                !advertisedIpStatus ||
-                (advertisedIpMode === 'local' && (!advertisedIpSelected || advertisedIpStatus.local_ip_options.length === 0)) ||
-                (advertisedIpMode === 'custom' && !advertisedIpCustom.trim())
-              }
-              onClick={() => openActionPrompt('advertised-ip')}
-            >
-              {advertisedIpBusy && <span className="button-spinner" aria-hidden="true" />}
-              {advertisedIpBusy
-                ? `Applying and restarting (${advertisedIpLiveuStatus || 'checking'})...`
-                : 'Apply Advertised IP'}
-            </button>
-            {advertisedIpMessage && <div className="info">{advertisedIpMessage}</div>}
-            {advertisedIpError && <div className="error">{advertisedIpError}</div>}
-          </div>
+              {advertisedIpMode === 'local' && (
+                <label>
+                  Local IP
+                  <select
+                    value={advertisedIpSelected}
+                    onChange={(e) => setAdvertisedIpSelected(e.target.value)}
+                    disabled={advertisedIpBusy || !advertisedIpStatus || advertisedIpStatus.local_ip_options.length === 0}
+                  >
+                    {(advertisedIpStatus?.local_ip_options || []).map((entry) => (
+                      <option key={`${entry.interface}-${entry.ip}`} value={entry.ip}>
+                        {entry.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {advertisedIpMode === 'local' && (advertisedIpStatus?.local_ip_options || []).length === 0 && (
+                <div className="error">No local IPv4 options were detected on this host.</div>
+              )}
+              {advertisedIpMode === 'custom' && (
+                <label>
+                  Custom IPv4
+                  <input
+                    value={advertisedIpCustom}
+                    onChange={(e) => setAdvertisedIpCustom(e.target.value)}
+                    placeholder="e.g. 172.16.32.7"
+                    disabled={advertisedIpBusy}
+                  />
+                </label>
+              )}
+              <button
+                className="inline-spinner-btn admin-action-btn"
+                disabled={
+                  advertisedIpBusy ||
+                  !advertisedIpStatus ||
+                  (advertisedIpMode === 'local' && (!advertisedIpSelected || advertisedIpStatus.local_ip_options.length === 0)) ||
+                  (advertisedIpMode === 'custom' && !advertisedIpCustom.trim())
+                }
+                onClick={() => openActionPrompt('advertised-ip')}
+              >
+                {advertisedIpBusy && <span className="button-spinner" aria-hidden="true" />}
+                {advertisedIpBusy
+                  ? `Applying and restarting (${advertisedIpLiveuStatus || 'checking'})...`
+                  : 'Apply Advertised IP'}
+              </button>
+              {advertisedIpMessage && <div className="info">{advertisedIpMessage}</div>}
+              {advertisedIpError && <div className="error">{advertisedIpError}</div>}
+            </div>
+          )}
 
           <div className="panel form admin-action-card">
             <h3>Restart LiveU Service</h3>

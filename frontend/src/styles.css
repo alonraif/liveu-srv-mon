@@ -125,6 +125,50 @@ h1, h2, h3, h4 {
   grid-area: network;
 }
 
+.ingest-port-line {
+  font-size: 1.05rem;
+  margin-bottom: 1rem;
+}
+
+.ingest-file-block {
+  margin-top: 1rem;
+}
+
+.ingest-file-title {
+  margin-bottom: 0.45rem;
+  color: #16324f;
+  font-size: 1.15rem;
+}
+
+.ingest-pre {
+  margin: 0;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #b7cae2;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4fb 100%);
+  overflow: auto;
+  max-height: 220px;
+}
+
+.ingest-pre code {
+  display: block;
+  font-family: "IBM Plex Mono", "Fira Code", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  font-size: 0.62rem !important;
+  line-height: 1.1 !important;
+  color: #143a5b;
+  white-space: pre;
+}
+
+/* Prism theme loads after app styles, so force compact code sizing here. */
+.ingest-pre,
+.ingest-pre[class*="language-"],
+.ingest-pre code,
+.ingest-pre code[class*="language-"],
+.ingest-pre code .token {
+  font-size: 0.62rem !important;
+  line-height: 1.1 !important;
+}
+
 .graphs-header {
   display: flex;
   justify-content: space-between;
