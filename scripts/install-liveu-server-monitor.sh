@@ -84,7 +84,7 @@ else
   fi
 fi
 
-echo "[4/9] Restricting TCP 8443 to local ETH subnets..."
+echo "[4/9] Restricting TCP 8443 to local interface subnets..."
 # Remove legacy broad rule if present.
 while iptables -D INPUT -p tcp --dport 8443 -j ACCEPT 2>/dev/null; do :; done
 # Remove previously managed subnet rules.
@@ -96,12 +96,12 @@ while IFS= read -r line; do
   iptables -D INPUT $rule_spec || true
 done < <(iptables -S INPUT)
 
-mapfile -t eth_subnets < <(ip -o -4 addr show up | awk '$2 ~ /^eth[0-9]+$/ {print $4}' | sort -u)
-if [[ "${#eth_subnets[@]}" -eq 0 ]]; then
-  echo "No active eth* IPv4 subnets found; refusing to expose tcp/8443."
+mapfile -t local_subnets < <(ip -o -4 addr show up scope global | awk '$2 != "lo" {print $4}' | sort -u)
+if [[ "${#local_subnets[@]}" -eq 0 ]]; then
+  echo "No active non-loopback IPv4 subnets found; refusing to expose tcp/8443."
   exit 1
 fi
-for subnet in "${eth_subnets[@]}"; do
+for subnet in "${local_subnets[@]}"; do
   iptables -I INPUT 1 -p tcp -s "$subnet" --dport 8443 -m comment --comment LIVEU_UI_INPUT_SUBNET_8443 -j ACCEPT
   echo "Added restricted INPUT rule for tcp/8443 from ${subnet}"
 done
