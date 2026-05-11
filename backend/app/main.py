@@ -45,7 +45,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title='LiveU Server Monitor',
-    version='0.1.0',
+    version='1.0',
     lifespan=lifespan,
     docs_url='/docs' if settings.enable_api_docs else None,
     redoc_url='/redoc' if settings.enable_api_docs else None,
