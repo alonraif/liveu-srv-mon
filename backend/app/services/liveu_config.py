@@ -11,7 +11,7 @@ logger = logging.getLogger('liveu-monitor')
 
 ROLE_MMH = 'MMH/Transceiver'
 ROLE_INGEST = 'Ingest'
-ROLE_VR = 'VideoReturn'
+ROLE_VR = 'Video Return'
 ROLE_UNKNOWN = 'Unknown'
 
 
@@ -121,13 +121,15 @@ def _parse_indented_section(lines: list[str], start_idx: int) -> tuple[dict[str,
 
 
 def _detect_role(boss_id: str | None, sections: dict[str, dict[str, Any]]) -> str:
+    # Video Return is uniquely identified by this section in `liveu-config --show`.
+    # Prioritize it over Boss1100_ prefix, which may also appear on VR servers.
+    if 'videoreturn port configuration' in sections:
+        return ROLE_VR
     if isinstance(boss_id, str):
         if boss_id.startswith('Boss1100_'):
             return ROLE_MMH
         if boss_id.startswith('BossIngest_'):
             return ROLE_INGEST
-    if 'videoreturn port configuration' in sections:
-        return ROLE_VR
     return ROLE_UNKNOWN
 
 

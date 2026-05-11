@@ -1004,7 +1004,10 @@ export function App() {
             <div className="panel liveu-mmh">
               <h3>MMH / Transceiver Configuration</h3>
               <p><strong>MMH Instances:</strong> {liveuConfig?.mmh?.mmh_instances ?? '-'}</p>
-              <p><strong>External Preview TCP Port:</strong> {liveuConfig?.mmh?.external_preview_tcp_port ?? 'N/A'}</p>
+              <p><strong>External Video Preview TCP Port:</strong> {liveuConfig?.role_config?.['external video preview tcp port']
+                ?? liveuConfig?.role_config?.['EXTERNAL_PREVIEW_TCP_PORT']
+                ?? liveuConfig?.mmh?.external_preview_tcp_port
+                ?? 'N/A'}</p>
               <p><strong>Local Hub Port:</strong> {liveuConfig?.mmh?.local_hub_port ?? 'N/A'}</p>
               <h4>Collector Ports</h4>
               <table>
@@ -1025,6 +1028,21 @@ export function App() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {liveuConfig?.server_type === 'Video Return' && (
+            <div className="panel liveu-mmh">
+              <h3>Video Return Configuration</h3>
+              <p><strong>External Video Preview TCP Port:</strong> {liveuConfig?.role_config?.['external video preview tcp port']
+                ?? liveuConfig?.role_config?.['EXTERNAL_VIDEO_PREVIEW_TCP_PORT']
+                ?? liveuConfig?.role_config?.['external preview tcp port']
+                ?? liveuConfig?.role_config?.['EXTERNAL_PREVIEW_TCP_PORT']
+                ?? 'N/A'}</p>
+              <p><strong>RTP Base Port:</strong> {liveuConfig?.role_config?.['rtp base port']
+                ?? liveuConfig?.role_config?.['RTP_BASE_PORT']
+                ?? liveuConfig?.role_config?.['RTP base port']
+                ?? 'N/A'}</p>
             </div>
           )}
 
