@@ -393,23 +393,33 @@ td {
 .admin-action-card {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  gap: 0.45rem;
+  padding: 0.85rem;
 }
 
 .admin-action-card h3 {
-  min-height: 2.8rem;
+  margin-bottom: 0.2rem;
+  line-height: 1.15;
+  min-height: 2.2rem;
 }
 
 .admin-action-desc {
-  min-height: 5rem;
-  margin-bottom: 0.4rem;
+  margin: 0;
+  min-height: 2.9rem;
+  line-height: 1.25;
+}
+
+.admin-action-card p {
+  margin: 0.2rem 0;
 }
 
 .admin-action-btn {
-  margin-top: 0;
+  margin-top: auto;
 }
 
 .admin-grid {
-  align-items: start;
+  align-items: stretch;
 }
 
 @media (max-width: 980px) {

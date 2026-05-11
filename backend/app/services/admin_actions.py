@@ -1,12 +1,99 @@
 import json
+import ipaddress
+import re
 import subprocess
 import time
+from pathlib import Path
 
 from ..config import get_settings
 
 
 class AdminActionError(Exception):
     pass
+
+
+_IPV4_PATTERN = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
+
+
+def _extract_ipv4_candidates(raw: str) -> list[str]:
+    values: list[str] = []
+    for match in _IPV4_PATTERN.finditer(raw):
+        candidate = match.group(0)
+        try:
+            normalized = str(ipaddress.IPv4Address(candidate))
+        except ValueError:
+            continue
+        if normalized not in values:
+            values.append(normalized)
+    return values
+
+
+def _get_host_local_ipv4_options() -> list[dict]:
+    try:
+        raw = _run_action('list-local-ips', timeout_seconds=10)
+    except AdminActionError:
+        return []
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+
+    options: list[dict] = []
+    seen_ips: set[str] = set()
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        iface = str(row.get('interface') or '').strip()
+        ip_raw = str(row.get('ip') or '').strip()
+        label = str(row.get('label') or '').strip()
+        if not iface or not ip_raw:
+            continue
+        try:
+            ip_value = str(ipaddress.IPv4Address(ip_raw))
+        except ValueError:
+            continue
+        if ip_value in seen_ips:
+            continue
+        seen_ips.add(ip_value)
+        options.append(
+            {
+                'interface': iface,
+                'ip': ip_value,
+                'label': label or f'{iface} ({ip_value})',
+            }
+        )
+    return options
+
+
+def _parse_configured_advertised_ip(path: Path) -> str | None:
+    try:
+        raw = path.read_text(encoding='utf-8', errors='ignore')
+    except OSError:
+        return None
+    candidates = _extract_ipv4_candidates(raw)
+    return candidates[0] if candidates else None
+
+
+def get_advertised_ip_status() -> dict:
+    settings = get_settings()
+    path = settings.host_liveu_dir / 'whatismyip.py'
+    local_ip_options = _get_host_local_ipv4_options()
+    configured_ip = _parse_configured_advertised_ip(path) if path.exists() else None
+    selected_mode = 'public'
+    selected_ip: str | None = None
+    if configured_ip:
+        local_ips = {entry.get('ip') for entry in local_ip_options if isinstance(entry, dict)}
+        selected_mode = 'local' if configured_ip in local_ips else 'custom'
+        selected_ip = configured_ip
+    return {
+        'file_exists': path.exists(),
+        'configured_ip': configured_ip,
+        'local_ip_options': local_ip_options,
+        'selected_mode': selected_mode,
+        'selected_ip': selected_ip,
+    }
 
 
 def _parse_systemctl_active_state(raw: str) -> str | None:
@@ -62,14 +149,17 @@ def _wait_for_liveu_status(max_wait_seconds: int = 20) -> str:
     return last
 
 
-def _run_action(action: str, timeout_seconds: int = 20) -> str:
+def _run_action(action: str, timeout_seconds: int = 20, args: list[str] | None = None) -> str:
     settings = get_settings()
-    if action not in {'restart-liveu', 'reboot'}:
+    if action not in {'restart-liveu', 'reboot', 'liveu-status', 'list-local-ips', 'set-whatismyip', 'clear-whatismyip'}:
         raise AdminActionError('Unsupported action')
 
     try:
+        command = [settings.admin_command_runner, action]
+        if args:
+            command.extend(args)
         result = subprocess.run(
-            [settings.admin_command_runner, action],
+            command,
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
@@ -111,6 +201,39 @@ def get_liveu_status_via_runner() -> str:
     if parsed:
         return parsed
     return 'unknown'
+
+
+def update_advertised_ip(mode: str, ip: str | None) -> tuple[str, str]:
+    status = get_advertised_ip_status()
+    allowed_ips = {entry.get('ip') for entry in status['local_ip_options'] if isinstance(entry, dict)}
+    normalized_ip: str | None = None
+    if mode == 'local':
+        if not ip:
+            raise AdminActionError('Local IP is required when mode is local')
+        try:
+            normalized_ip = str(ipaddress.IPv4Address(ip.strip()))
+        except ValueError as exc:
+            raise AdminActionError('Invalid local IPv4 address') from exc
+        if normalized_ip not in allowed_ips:
+            raise AdminActionError('Selected local IP is not allowed on this host')
+        _run_action('set-whatismyip', timeout_seconds=15, args=[normalized_ip])
+    elif mode == 'custom':
+        if not ip:
+            raise AdminActionError('Custom IP is required when mode is custom')
+        try:
+            normalized_ip = str(ipaddress.IPv4Address(ip.strip()))
+        except ValueError as exc:
+            raise AdminActionError('Invalid custom IPv4 address') from exc
+        _run_action('set-whatismyip', timeout_seconds=15, args=[normalized_ip])
+    elif mode == 'public':
+        _run_action('clear-whatismyip', timeout_seconds=15)
+    else:
+        raise AdminActionError('Unsupported advertised IP mode')
+
+    restart_output = restart_liveu_service()
+    if mode == 'public':
+        return 'public', restart_output
+    return normalized_ip or '', restart_output
 
 
 def run_speedtest() -> dict:

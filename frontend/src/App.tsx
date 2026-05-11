@@ -4,10 +4,19 @@ import 'prismjs/components/prism-python';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 import { apiFetch } from './api';
-import { AuditEntry, AuthState, Identity, NetworkInfo, SpeedtestResult, StatusCurrent, StatusHistory } from './types';
+import {
+  AdvertisedIpStatus,
+  AuditEntry,
+  AuthState,
+  Identity,
+  NetworkInfo,
+  SpeedtestResult,
+  StatusCurrent,
+  StatusHistory,
+} from './types';
 
 type TabKey = 'overview' | 'liveu' | 'logs' | 'admin' | 'audit';
-type AdminActionPrompt = 'restart' | 'reboot' | 'speedtest' | null;
+type AdminActionPrompt = 'restart' | 'reboot' | 'speedtest' | 'advertised-ip' | null;
 type LoginUserType = 'administrator' | 'monitor';
 const TAB_SESSION_KEY = 'liveu_tab_session';
 const TAB_ACTIVE_KEY = 'liveu_active_tab';
@@ -74,6 +83,14 @@ export function App() {
   const [speedtestPhaseIdx, setSpeedtestPhaseIdx] = useState(0);
   const [speedtestResult, setSpeedtestResult] = useState<SpeedtestResult | null>(null);
   const [speedtestError, setSpeedtestError] = useState<string | null>(null);
+  const [advertisedIpStatus, setAdvertisedIpStatus] = useState<AdvertisedIpStatus | null>(null);
+  const [advertisedIpMode, setAdvertisedIpMode] = useState<'public' | 'local' | 'custom'>('public');
+  const [advertisedIpSelected, setAdvertisedIpSelected] = useState<string>('');
+  const [advertisedIpCustom, setAdvertisedIpCustom] = useState<string>('');
+  const [advertisedIpBusy, setAdvertisedIpBusy] = useState(false);
+  const [advertisedIpLiveuStatus, setAdvertisedIpLiveuStatus] = useState<string | null>(null);
+  const [advertisedIpMessage, setAdvertisedIpMessage] = useState<string | null>(null);
+  const [advertisedIpError, setAdvertisedIpError] = useState<string | null>(null);
   const [actionPrompt, setActionPrompt] = useState<AdminActionPrompt>(null);
   const [promptPassword, setPromptPassword] = useState('');
   const [promptRebootConfirm, setPromptRebootConfirm] = useState('');
@@ -177,6 +194,21 @@ export function App() {
     }
   }, [handleDataError]);
 
+  const loadAdvertisedIpStatus = useCallback(async () => {
+    try {
+      const statusValue = await apiFetch<AdvertisedIpStatus>('/api/admin/advertised-ip');
+      setAdvertisedIpStatus(statusValue);
+      setAdvertisedIpMode(
+        statusValue.selected_mode === 'local' ? 'local' : statusValue.selected_mode === 'custom' ? 'custom' : 'public'
+      );
+      setAdvertisedIpSelected(statusValue.selected_ip || statusValue.local_ip_options[0]?.ip || '');
+      setAdvertisedIpCustom(statusValue.selected_mode === 'custom' ? statusValue.selected_ip || '' : '');
+      setError(null);
+    } catch (e: any) {
+      handleDataError(e, 'Failed to load advertised IP status');
+    }
+  }, [handleDataError]);
+
   useEffect(() => {
     ensureSession();
   }, [ensureSession]);
@@ -244,6 +276,11 @@ export function App() {
     }, POLL_AUDIT_MS);
     return () => window.clearInterval(timer);
   }, [auth, tab, loadAuditData]);
+
+  useEffect(() => {
+    if (!auth || auth.must_change_password || tab !== 'admin') return;
+    loadAdvertisedIpStatus();
+  }, [auth, tab, loadAdvertisedIpStatus]);
 
   useEffect(() => {
     Prism.highlightAll();
@@ -425,13 +462,12 @@ export function App() {
         method: 'POST',
         body: JSON.stringify({ password }),
       });
-      setRestartMessage(res.detail);
 
       const maxPolls = 120;
       for (let i = 0; i < maxPolls; i++) {
         const current = await pollLiveuStatus();
         if (current === 'active') {
-          setRestartMessage('LiveU service restarted successfully (active).');
+          setRestartMessage('LiveU service restarted successfully');
           setRestartError(null);
           break;
         }
@@ -536,6 +572,77 @@ export function App() {
     }
   }
 
+  async function doSetAdvertisedIp(password: string) {
+    if (advertisedIpBusy) return;
+    const isValidIpv4 = (value: string): boolean => {
+      const parts = value.trim().split('.');
+      if (parts.length !== 4) return false;
+      return parts.every((p) => /^\d+$/.test(p) && Number(p) >= 0 && Number(p) <= 255);
+    };
+    if (advertisedIpMode === 'local' && !advertisedIpSelected) {
+      setAdvertisedIpError('Select a local IP address');
+      return;
+    }
+    if (advertisedIpMode === 'custom' && !isValidIpv4(advertisedIpCustom)) {
+      setAdvertisedIpError('Enter a valid IPv4 address for Custom mode');
+      return;
+    }
+    setAdvertisedIpBusy(true);
+    setAdvertisedIpLiveuStatus(null);
+    setAdvertisedIpMessage(null);
+    setAdvertisedIpError(null);
+
+    const pollLiveuStatus = async (): Promise<string> => {
+      try {
+        const current = await apiFetch<{ status: string }>('/api/admin/liveu-status');
+        const statusValue = current.status || 'unknown';
+        setAdvertisedIpLiveuStatus(statusValue);
+        return statusValue;
+      } catch {
+        return 'unknown';
+      }
+    };
+
+    void pollLiveuStatus();
+    try {
+      const res = await apiFetch<{ detail: string }>('/api/admin/advertised-ip', {
+        method: 'POST',
+        body: JSON.stringify({
+          password,
+          mode: advertisedIpMode,
+          ip: advertisedIpMode === 'local' ? advertisedIpSelected : advertisedIpMode === 'custom' ? advertisedIpCustom.trim() : null,
+        }),
+      });
+
+      const maxPolls = 120;
+      for (let i = 0; i < maxPolls; i++) {
+        const current = await pollLiveuStatus();
+        if (current === 'active') {
+          break;
+        }
+        if (current === 'failed') {
+          setAdvertisedIpError('LiveU service entered failed state after restart.');
+          break;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+        if (i === maxPolls - 1) {
+          setAdvertisedIpError(`Restart status check timed out. Current host state: ${current}`);
+        }
+      }
+
+      setAdvertisedIpMessage(res.detail || 'Advertised IP updated');
+      await Promise.allSettled([loadAdvertisedIpStatus(), loadStatusCurrent(), loadNetworkInfo()]);
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to update advertised IP';
+      setAdvertisedIpError(msg);
+      if (String(msg).toLowerCase().includes('password confirmation failed')) {
+        throw err;
+      }
+    } finally {
+      setAdvertisedIpBusy(false);
+    }
+  }
+
   function openActionPrompt(action: Exclude<AdminActionPrompt, null>) {
     setPromptError(null);
     setPromptPassword('');
@@ -579,6 +686,8 @@ export function App() {
         await doReboot(password, rebootConfirm);
       } else if (chosenAction === 'speedtest') {
         await doRunSpeedtest(password);
+      } else if (chosenAction === 'advertised-ip') {
+        await doSetAdvertisedIp(password);
       }
     } catch {
       // Errors are surfaced on the action cards.
@@ -1013,6 +1122,77 @@ export function App() {
       {tab === 'admin' && (
         <section className="grid admin-grid">
           <div className="panel form admin-action-card">
+            <h3>Advertised stream destination</h3>
+            <p><strong>Configured IP:</strong> {advertisedIpStatus?.configured_ip || 'Public IP (no override)'}</p>
+            <p><strong>Current Public IP:</strong> {network?.public_ip || 'Unavailable'}</p>
+            <label>
+              Advertise
+              <select
+                value={advertisedIpMode}
+                onChange={(e) =>
+                  setAdvertisedIpMode(
+                    e.target.value === 'local' ? 'local' : e.target.value === 'custom' ? 'custom' : 'public'
+                  )
+                }
+                disabled={advertisedIpBusy}
+              >
+                <option value="public">Public IP</option>
+                <option value="local" disabled={!advertisedIpStatus || advertisedIpStatus.local_ip_options.length === 0}>
+                  Local IP
+                </option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            {advertisedIpMode === 'local' && (
+              <label>
+                Local IP
+                <select
+                  value={advertisedIpSelected}
+                  onChange={(e) => setAdvertisedIpSelected(e.target.value)}
+                  disabled={advertisedIpBusy || !advertisedIpStatus || advertisedIpStatus.local_ip_options.length === 0}
+                >
+                  {(advertisedIpStatus?.local_ip_options || []).map((entry) => (
+                    <option key={`${entry.interface}-${entry.ip}`} value={entry.ip}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {advertisedIpMode === 'local' && (advertisedIpStatus?.local_ip_options || []).length === 0 && (
+              <div className="error">No local IPv4 options were detected on this host.</div>
+            )}
+            {advertisedIpMode === 'custom' && (
+              <label>
+                Custom IPv4
+                <input
+                  value={advertisedIpCustom}
+                  onChange={(e) => setAdvertisedIpCustom(e.target.value)}
+                  placeholder="e.g. 172.16.32.7"
+                  disabled={advertisedIpBusy}
+                />
+              </label>
+            )}
+            <button
+              className="inline-spinner-btn admin-action-btn"
+              disabled={
+                advertisedIpBusy ||
+                !advertisedIpStatus ||
+                (advertisedIpMode === 'local' && (!advertisedIpSelected || advertisedIpStatus.local_ip_options.length === 0)) ||
+                (advertisedIpMode === 'custom' && !advertisedIpCustom.trim())
+              }
+              onClick={() => openActionPrompt('advertised-ip')}
+            >
+              {advertisedIpBusy && <span className="button-spinner" aria-hidden="true" />}
+              {advertisedIpBusy
+                ? `Applying and restarting (${advertisedIpLiveuStatus || 'checking'})...`
+                : 'Apply Advertised IP'}
+            </button>
+            {advertisedIpMessage && <div className="info">{advertisedIpMessage}</div>}
+            {advertisedIpError && <div className="error">{advertisedIpError}</div>}
+          </div>
+
+          <div className="panel form admin-action-card">
             <h3>Restart LiveU Service</h3>
             <p className="admin-action-desc">Requires password confirmation.</p>
             <button className="inline-spinner-btn admin-action-btn" disabled={restartBusy} onClick={() => openActionPrompt('restart')}>
@@ -1108,7 +1288,17 @@ export function App() {
               {actionPrompt === 'restart' && 'Confirm Restart LiveU Service'}
               {actionPrompt === 'reboot' && 'Confirm Reboot Server'}
               {actionPrompt === 'speedtest' && 'Confirm Network Speed Test'}
+              {actionPrompt === 'advertised-ip' && 'Confirm Advertised IP Change'}
             </h3>
+            {actionPrompt === 'advertised-ip' && (
+              <p>
+                Selection: {advertisedIpMode === 'public'
+                  ? 'Public IP'
+                  : advertisedIpMode === 'local'
+                    ? `Local IP (${advertisedIpSelected})`
+                    : `Custom IP (${advertisedIpCustom.trim() || '-'})`}. This action restarts LiveU service.
+              </p>
+            )}
             <form className="form" onSubmit={onConfirmActionPrompt}>
               <label>
                 Password

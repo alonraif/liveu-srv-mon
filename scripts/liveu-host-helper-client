@@ -2,13 +2,20 @@
 set -euo pipefail
 
 action="${1:-}"
+arg1="${2:-}"
 if [[ -z "${action}" ]]; then
-  echo "Usage: liveu-host-helper-client <restart-liveu|reboot|liveu-config-show|liveu-status>" >&2
+  echo "Usage: liveu-host-helper-client <restart-liveu|reboot|liveu-config-show|liveu-status|list-local-ips|set-whatismyip|clear-whatismyip> [ipv4]" >&2
   exit 2
 fi
 
 case "$action" in
-  restart-liveu|reboot|liveu-config-show|liveu-status)
+  restart-liveu|reboot|liveu-config-show|liveu-status|list-local-ips|clear-whatismyip)
+    ;;
+  set-whatismyip)
+    if [[ -z "${arg1}" ]]; then
+      echo "set-whatismyip requires an ipv4 argument" >&2
+      exit 2
+    fi
     ;;
   *)
     echo "Unsupported action: ${action}" >&2
@@ -18,14 +25,16 @@ esac
 
 socket_path="${LIVEU_HELPER_SOCKET_PATH:-/run/liveu-helper/liveu-helper.sock}"
 
-python3 - "$socket_path" "$action" <<'PY'
+python3 - "$socket_path" "$action" "$arg1" <<'PY'
 import json
 import os
 import socket
 import sys
 
-sock_path, action = sys.argv[1], sys.argv[2]
+sock_path, action, arg1 = sys.argv[1], sys.argv[2], sys.argv[3]
 request = {"action": action}
+if action == "set-whatismyip":
+    request["advertised_ip"] = arg1
 shared_token = os.environ.get("LIVEU_HELPER_SHARED_TOKEN", "").strip()
 if shared_token:
     request["token"] = shared_token

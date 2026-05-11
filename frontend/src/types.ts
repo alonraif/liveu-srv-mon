@@ -70,3 +70,15 @@ export type SpeedtestResult = {
   server_host: string;
   public_ip: string;
 };
+
+export type AdvertisedIpStatus = {
+  local_ip_options: Array<{
+    interface: string;
+    ip: string;
+    label: string;
+  }>;
+  file_exists: boolean;
+  configured_ip: string | null;
+  selected_mode: string;
+  selected_ip: string | null;
+};

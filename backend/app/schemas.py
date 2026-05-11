@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -91,6 +91,25 @@ class SpeedtestResultResponse(BaseModel):
 
 class SpeedtestRequest(BaseModel):
     password: str | None = None
+
+
+class AdvertisedIpStatusResponse(BaseModel):
+    class LocalIpOption(BaseModel):
+        interface: str
+        ip: str
+        label: str
+
+    file_exists: bool
+    configured_ip: str | None
+    local_ip_options: list[LocalIpOption]
+    selected_mode: str
+    selected_ip: str | None
+
+
+class AdvertisedIpUpdateRequest(BaseModel):
+    password: str
+    mode: Literal['public', 'local', 'custom']
+    ip: str | None = None
 
 
 class ApiError(BaseModel):

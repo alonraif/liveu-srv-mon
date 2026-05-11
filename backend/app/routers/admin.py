@@ -6,9 +6,24 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import get_client_ip, require_admin, validate_csrf
 from ..config import get_settings
-from ..schemas import AdminPasswordConfirm, RebootRequest, SpeedtestRequest, SpeedtestResultResponse
+from ..schemas import (
+    AdminPasswordConfirm,
+    AdvertisedIpStatusResponse,
+    AdvertisedIpUpdateRequest,
+    RebootRequest,
+    SpeedtestRequest,
+    SpeedtestResultResponse,
+)
 from ..security import verify_password
-from ..services.admin_actions import AdminActionError, get_liveu_status_via_runner, reboot_server, restart_liveu_service, run_speedtest
+from ..services.admin_actions import (
+    AdminActionError,
+    get_advertised_ip_status,
+    get_liveu_status_via_runner,
+    reboot_server,
+    restart_liveu_service,
+    run_speedtest,
+    update_advertised_ip,
+)
 from ..services.audit import write_audit
 from ..services.rate_limiter import SlidingWindowRateLimiter
 
@@ -57,6 +72,66 @@ def restart_liveu(
         remote_ip=client_ip,
     )
     return {'detail': f'LiveU service restart result: {output}', 'output': output}
+
+
+@router.get('/advertised-ip', response_model=AdvertisedIpStatusResponse)
+def advertised_ip_status(
+    request: Request,
+    ctx=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    status_value = get_advertised_ip_status()
+    write_audit(
+        db,
+        username=ctx.user.username,
+        action='advertised_ip_status_check',
+        details=f"Queried advertised IP status: file_exists={status_value['file_exists']} configured_ip={status_value['configured_ip'] or 'none'}",
+        remote_ip=get_client_ip(request),
+    )
+    return AdvertisedIpStatusResponse(**status_value)
+
+
+@router.post('/advertised-ip')
+def set_advertised_ip(
+    payload: AdvertisedIpUpdateRequest,
+    request: Request,
+    _csrf: None = Depends(validate_csrf),
+    ctx=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    client_ip = get_client_ip(request)
+    limiter_key = f'advertised-ip:{client_ip}:{ctx.user.username}'
+    if critical_action_limiter.is_limited(limiter_key):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail='Too many advertised IP change attempts')
+    critical_action_limiter.register_attempt(limiter_key)
+
+    if not verify_password(payload.password, ctx.user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Password confirmation failed')
+    ctx.session.last_reauth_at = datetime.utcnow()
+    db.add(ctx.session)
+    db.commit()
+
+    try:
+        selected, restart_output = update_advertised_ip(payload.mode, payload.ip)
+    except AdminActionError as exc:
+        write_audit(
+            db,
+            username=ctx.user.username,
+            action='advertised_ip_update_failed',
+            details=str(exc),
+            remote_ip=client_ip,
+        )
+        raise HTTPException(status_code=500, detail=f'Failed to update advertised IP: {exc}') from exc
+
+    selected_detail = selected if payload.mode == 'local' else 'public'
+    write_audit(
+        db,
+        username=ctx.user.username,
+        action='advertised_ip_updated',
+        details=f'Advertised IP mode set to {payload.mode} ({selected_detail}); LiveU restart result: {restart_output}',
+        remote_ip=client_ip,
+    )
+    return {'detail': f'Advertised IP updated to {selected_detail}. LiveU restart result: {restart_output}'}
 
 
 @router.post('/reboot')

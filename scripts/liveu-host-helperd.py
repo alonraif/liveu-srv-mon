@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import ipaddress
 import logging
 import os
 import socket
@@ -24,8 +25,89 @@ ALLOWED_ACTIONS = {
     "liveu-status": ["/usr/bin/systemctl", "show", "--property", "ActiveState", "--value", "liveu"],
 }
 
+_VIRTUAL_IFACE_PREFIXES = ("lo", "docker", "br-", "veth", "virbr", "tun", "tap")
 
-def _handle_action(action: str) -> tuple[bool, str]:
+
+def _list_local_physical_ips() -> tuple[bool, str]:
+    try:
+        result = subprocess.run(
+            ["/usr/sbin/ip", "-o", "-4", "addr", "show", "up", "scope", "global"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f"failed to list interfaces: {exc}"
+
+    if result.returncode != 0:
+        output = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+        return False, output or f"ip command failed with exit code {result.returncode}"
+
+    options: list[dict[str, str]] = []
+    seen_ips: set[str] = set()
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        iface = parts[1]
+        if "@" in iface:
+            iface = iface.split("@", 1)[0]
+        if iface.startswith(_VIRTUAL_IFACE_PREFIXES):
+            continue
+        if not (Path("/sys/class/net") / iface / "device").exists():
+            continue
+        cidr = parts[3]
+        ip = cidr.split("/", 1)[0].strip()
+        try:
+            ip = str(ipaddress.IPv4Address(ip))
+        except ValueError:
+            continue
+        if ip in seen_ips:
+            continue
+        seen_ips.add(ip)
+        options.append({"interface": iface, "ip": ip, "label": f"{iface} ({ip})"})
+
+    return True, json.dumps(options)
+
+
+def _set_whatismyip(ip_value: str) -> tuple[bool, str]:
+    try:
+        ip_normalized = str(ipaddress.IPv4Address(ip_value.strip()))
+    except ValueError:
+        return False, "invalid ipv4 address"
+
+    target = Path("/etc/liveu/whatismyip.py")
+    temp = target.with_suffix(".py.tmp")
+    content = f"STATIC_IP_LIST = ['{ip_normalized}']\n"
+    try:
+        temp.write_text(content, encoding="utf-8")
+        os.chmod(temp, 0o644)
+        os.replace(temp, target)
+    except OSError as exc:
+        return False, f"failed to write whatismyip.py: {exc}"
+    return True, f"configured advertised IP to {ip_normalized}"
+
+
+def _clear_whatismyip() -> tuple[bool, str]:
+    target = Path("/etc/liveu/whatismyip.py")
+    try:
+        if target.exists():
+            target.unlink()
+    except OSError as exc:
+        return False, f"failed to remove whatismyip.py: {exc}"
+    return True, "advertised IP set to public"
+
+
+def _handle_action(action: str, payload: dict) -> tuple[bool, str]:
+    if action == "list-local-ips":
+        return _list_local_physical_ips()
+    if action == "set-whatismyip":
+        ip_value = str(payload.get("advertised_ip") or "")
+        return _set_whatismyip(ip_value)
+    if action == "clear-whatismyip":
+        return _clear_whatismyip()
+
     command = ALLOWED_ACTIONS.get(action)
     if not command:
         return False, "unsupported action"
@@ -90,7 +172,7 @@ def _serve() -> int:
                             response = {"ok": False, "error": "invalid shared token"}
                             conn.sendall((json.dumps(response) + "\n").encode("utf-8"))
                             continue
-                    ok, output = _handle_action(action)
+                    ok, output = _handle_action(action, payload)
                     response = {"ok": ok}
                     if ok:
                         response["output"] = output

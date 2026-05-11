@@ -55,6 +55,7 @@ Production-oriented local monitoring MVP for Ubuntu-based LiveU servers.
 - Controlled admin actions:
   - restart LiveU service (password re-entry)
   - reboot server (password re-entry + `REBOOT` confirmation)
+  - advertised ingest IP override (`/etc/liveu/whatismyip.py`) with local IP selection + restart
 
 ## Repository Structure
 
@@ -180,7 +181,7 @@ Admin endpoints call `/usr/local/bin/liveu-host-helper-client`, which talks to a
 - socket path in container: `/run/liveu-helper/liveu-helper.sock`
 - override with env var: `LIVEU_HELPER_SOCKET_PATH`
 
-The host helper must enforce its own strict action allowlist (`restart-liveu`, `reboot`, `liveu-config-show`) and run as root on the host.
+The host helper must enforce its own strict action allowlist (`restart-liveu`, `reboot`, `liveu-config-show`, `liveu-status`, `list-local-ips`, `set-whatismyip`, `clear-whatismyip`) and run as root on the host.
 
 No arbitrary commands are accepted by the API client path.
 

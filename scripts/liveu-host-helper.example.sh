@@ -14,6 +14,14 @@ case "$action" in
   liveu-config-show)
     exec /bin/bash -lc 'liveu-config --show'
     ;;
+  set-whatismyip)
+    ip="${2:-}"
+    [[ -n "$ip" ]] || { echo "missing ip" >&2; exit 2; }
+    printf "STATIC_IP_LIST = ['%s']\n" "$ip" > /etc/liveu/whatismyip.py
+    ;;
+  clear-whatismyip)
+    rm -f /etc/liveu/whatismyip.py
+    ;;
   *)
     echo "unsupported action" >&2
     exit 2
