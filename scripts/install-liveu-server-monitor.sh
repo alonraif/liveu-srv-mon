@@ -120,9 +120,18 @@ install -m 0644 "${REPO_ROOT}/scripts/liveu-host-helper.service" /etc/systemd/sy
 install -d -m 0755 /run/liveu-helper
 systemctl daemon-reload
 systemctl enable --now liveu-host-helper.service
-if [[ ! -S /run/liveu-helper/liveu-helper.sock ]]; then
-  echo "Host helper socket missing: /run/liveu-helper/liveu-helper.sock"
+helper_socket="/run/liveu-helper/liveu-helper.sock"
+socket_wait_seconds=10
+for ((i=1; i<=socket_wait_seconds; i++)); do
+  if [[ -S "${helper_socket}" ]]; then
+    break
+  fi
+  sleep 1
+done
+if [[ ! -S "${helper_socket}" ]]; then
+  echo "Host helper socket missing after ${socket_wait_seconds}s: ${helper_socket}"
   systemctl status --no-pager liveu-host-helper.service || true
+  journalctl -u liveu-host-helper.service -n 80 --no-pager || true
   exit 1
 fi
 
@@ -135,6 +144,8 @@ fi
 
 generated_initial_admin=0
 generated_initial_monitor=0
+generated_admin_password=""
+generated_monitor_password=""
 
 if ! grep -q '^INITIAL_ADMIN_PASSWORD=' .env; then
   echo 'INITIAL_ADMIN_PASSWORD=' >> .env
@@ -145,20 +156,47 @@ fi
 current_initial="$(grep '^INITIAL_ADMIN_PASSWORD=' .env | tail -n1 | cut -d= -f2-)"
 current_monitor_initial="$(grep '^INITIAL_MONITOR_PASSWORD=' .env | tail -n1 | cut -d= -f2-)"
 if [[ -z "${current_initial}" ]]; then
-  generated_password="$(openssl rand -base64 24 | tr -d '\n' | tr '/+' 'AB')"
-  sed -i "s|^INITIAL_ADMIN_PASSWORD=.*$|INITIAL_ADMIN_PASSWORD=${generated_password}|" .env
+  generated_admin_password="$(openssl rand -base64 24 | tr -d '\n' | tr '/+' 'AB')"
+  sed -i "s|^INITIAL_ADMIN_PASSWORD=.*$|INITIAL_ADMIN_PASSWORD=${generated_admin_password}|" .env
   generated_initial_admin=1
-  echo "Generated INITIAL_ADMIN_PASSWORD in .env for first startup."
-  echo "Temporary initial administrator password: ${generated_password}"
-  echo "Change it immediately after first login."
 fi
 if [[ -z "${current_monitor_initial}" ]]; then
   generated_monitor_password="$(openssl rand -base64 24 | tr -d '\n' | tr '/+' 'CD')"
   sed -i "s|^INITIAL_MONITOR_PASSWORD=.*$|INITIAL_MONITOR_PASSWORD=${generated_monitor_password}|" .env
   generated_initial_monitor=1
-  echo "Generated INITIAL_MONITOR_PASSWORD in .env for first startup."
-  echo "Temporary initial monitor password: ${generated_monitor_password}"
-  echo "Change it immediately after first login."
+fi
+
+if [[ "${generated_initial_admin}" -eq 1 || "${generated_initial_monitor}" -eq 1 ]]; then
+  if [[ -t 1 ]]; then
+    color_warn=$'\033[1;33m'
+    color_key=$'\033[1;36m'
+    color_pw=$'\033[1;31m'
+    color_reset=$'\033[0m'
+  else
+    color_warn=""
+    color_key=""
+    color_pw=""
+    color_reset=""
+  fi
+
+  echo
+  echo "${color_warn}============================================================${color_reset}"
+  echo "${color_warn}  IMPORTANT: One-time bootstrap credentials were generated   ${color_reset}"
+  echo "${color_warn}============================================================${color_reset}"
+  if [[ "${generated_initial_admin}" -eq 1 ]]; then
+    echo "${color_key}INITIAL_ADMIN_PASSWORD:${color_reset} ${color_pw}${generated_admin_password}${color_reset}"
+  fi
+  if [[ "${generated_initial_monitor}" -eq 1 ]]; then
+    echo "${color_key}INITIAL_MONITOR_PASSWORD:${color_reset} ${color_pw}${generated_monitor_password}${color_reset}"
+  fi
+  echo "${color_warn}Record these now. They are scrubbed from .env after first startup.${color_reset}"
+  echo
+  if [[ -t 0 ]]; then
+    read -r -n 1 -s -p "Press any key to continue installation..." _
+    echo
+  else
+    echo "No interactive terminal detected; continuing without keypress pause."
+  fi
 fi
 
 if [[ -n "${SUDO_USER:-}" && "${SUDO_USER}" != "root" ]]; then
