@@ -833,7 +833,7 @@ export function App() {
               </div>
               <div>
                 <strong>SSH Port 22:</strong>{' '}
-                <span className={`badge status-badge ${network?.ssh_port_22 === 'open' ? 'badge-green' : 'badge-red'}`}>
+                <span className={`badge status-badge ${network?.ssh_port_22 === 'open' ? 'badge-red' : 'badge-green'}`}>
                   {network?.ssh_port_22 || '-'}
                 </span>
               </div>
