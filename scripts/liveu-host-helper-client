@@ -63,6 +63,11 @@ except OSError as exc:
 
 payload = b"".join(chunks).decode("utf-8", "replace").strip()
 if not payload:
+    if action == "reboot":
+        # Reboot can drop the connection before helper sends JSON response.
+        # Treat this as accepted because host shutdown may already be in progress.
+        print("Reboot command accepted (connection closed before response)")
+        sys.exit(0)
     print("Empty response from host helper", file=sys.stderr)
     sys.exit(13)
 

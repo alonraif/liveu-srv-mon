@@ -500,37 +500,47 @@ export function App() {
     setRebootError(null);
 
     try {
-      const res = await apiFetch<{ detail: string }>('/api/admin/reboot', {
+      await apiFetch<{ detail: string }>('/api/admin/reboot', {
         method: 'POST',
         body: JSON.stringify({ password, confirmation }),
       });
 
-      // Start polling for server to come back
+      // Start polling for reboot cycle: server goes down, then comes back.
       setRebootBusy(false);
       setRebootWaiting(true);
 
       const pollInterval = 5000; // 5 seconds
       const maxPolls = 60; // 5 minutes max
       let pollCount = 0;
+      let seenServerDown = false;
 
       const pollTimer = window.setInterval(async () => {
         pollCount++;
         if (pollCount > maxPolls) {
           window.clearInterval(pollTimer);
           setRebootWaiting(false);
-          setRebootError('Server did not come back online in time. Please check manually.');
+          setRebootError(
+            seenServerDown
+              ? 'Server did not come back online in time. Please check manually.'
+              : 'Reboot not yet detected. Server never appeared offline during the check window.'
+          );
           return;
         }
 
         try {
           await apiFetch('/api/status/current');
+          if (!seenServerDown) {
+            // Server is still reachable; reboot may still be pending.
+            return;
+          }
           window.clearInterval(pollTimer);
           setRebootWaiting(false);
           setRebootMessage('Server rebooted successfully and is back online.');
           // Refresh all data
           await Promise.allSettled([loadStatusCurrent(), loadStatusHistory(), loadNetworkInfo()]);
         } catch {
-          // Keep polling - server is still down
+          // Connection failure indicates the reboot has likely started.
+          seenServerDown = true;
         }
       }, pollInterval);
     } catch (err: any) {
@@ -1224,7 +1234,7 @@ export function App() {
               {rebootBusy
                 ? 'Rebooting...'
                 : rebootWaiting
-                  ? 'Waiting for server to reboot...'
+                  ? 'Rebooting...'
                   : 'Reboot Server'}
             </button>
             {rebootMessage && <div className="info">{rebootMessage}</div>}
